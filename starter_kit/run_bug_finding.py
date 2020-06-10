@@ -9,6 +9,15 @@ import json
 import codecs
 import logging
 
+### Pre-defined
+KEY_SOURCE = 'raw_source_code'
+KEY_AST = 'ast'
+KEY_TOKENS = 'tokenList'
+KEY_TOKENRANGE = 'tokenRangesList'
+
+### Self-defined
+KEY_START_LINE = 'start_line'
+KEY_IF_AST = 'if_ast'
 
 def read_json_file(json_file_path: str) -> List:
     """ Read a JSON file given path """
@@ -59,80 +68,34 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
     #                                                   #
     #####################################################
 
-    # For each file, the current naive implementation returns a random line number between 1-500
-    # Replace this with your own code
-
-    if_dict = {}
-    len_list = []
+    json_dict = defaultdict(dict)
     expressions = {}
     log_level = logging.INFO
     logging.basicConfig(level=log_level)
 
-    def dict_visitor(d):
-        if isinstance(d, dict):
-            for k, v in d.items():
-                if isinstance(v, dict):
-                    dict_visitor(v)
-                elif isinstance(v, list):
-                    for i in v:
-                        dict_visitor(i)
-                else:
-                    #print(k, v)
-                    if k == "type" and v == "IfStatement":
-                        loc_lst.append(d["loc"])
-                        #print("Check")
-                        condition = d["test"]
-                        # d["test"]["object"]
-                        # d["test"]["property"]
-                        #print(condition)
-                        type = condition["type"]
-                        if type in expressions.keys():
-                            expressions[type].update(list(condition.keys()))
-                        else:
-                            expressions[type] = set(list(condition.keys()))
-
-        elif isinstance(d, list):
-            for i in d:
-                dict_visitor(i)
-        else:
-            pass
-            #print(type(d), d)
-
     #if log_level == logging.DEBUG:
-    list_of_json_file_paths = list_of_json_file_paths#[0:100]
+    list_of_json_file_paths = list_of_json_file_paths#[0:50]
     for path in list_of_json_file_paths:
         try:
             logging.debug(path)
             j = read_json_file(path)
-            #file = open(path)
-            #j = json.load(file)
             # print(j.keys())
             # dict_keys(['tokenList', 'raw_source_code', 'ast', 'tokenRangesList'])
 
-            token_list = j["tokenList"]
-            indices = [i for i, x in enumerate(token_list) if x == "if"]
-            len_list.append(len(indices))
-
             #logging.debug("Source")
-            #logging.debug(j["raw_source_code"])
-            ast = j["ast"]
-            loc_lst = []
-            dict_visitor(ast)
-            logging.debug(loc_lst)
-            if_dict[path] = []
-            for loc in loc_lst:
-                if_dict[path].append(loc["start"]["line"])
+            #logging.debug(j[KEY_SOURCE])
+            json_dict[path] = defaultdict(list)
+            dict_visitor(j[KEY_AST], json_dict[path], expressions)
+            #print_expressions(expressions)
+            logging.debug(json_dict[path][KEY_START_LINE])
 
         except Exception as e:
             logging.error("Exception in file " + path)
             logging.error(e)
 
-    predicted_results = defaultdict(list)
 
-    for path, start_line in if_dict.items():
-        predicted_results[path] = start_line
-
-    return dict(predicted_results)
+    result_dict = create_result(json_dict)
+    return result_dict
 
 # TODO
 # Remove comments ?
@@ -146,15 +109,17 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
 
 
 def print_json(j):
-    print("AST", j["ast"])
-    print("Source", j["raw_source_code"])
-    print("TokenList", j["tokenList"])
-    print(j["tokenRangesList"])
+    print("AST", j[KEY_AST])
+    print("Source", j[KEY_SOURCE])
+    print("TokenList", j[KEY_TOKENS])
+    print("TokenRange", j[KEY_TOKENRANGE])
+
 
 def count_unique(list):
     values, counts = np.unique(list, return_counts=True)
     print(values)
     print(counts)
+
 
 def print_expressions(expressions):
     for k, v in expressions.items():
@@ -175,3 +140,44 @@ def print_expressions(expressions):
     # {'range', 'right', 'operator', 'type', 'loc', 'left'}
     # Identifier
     # {'name', 'type', 'range', 'loc'}
+
+
+def dict_visitor(value, json_dict, expressions):
+
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if isinstance(v, dict):
+                dict_visitor(v, json_dict, expressions)
+            elif isinstance(v, list):
+                for i in v:
+                    dict_visitor(i, json_dict, expressions)
+            elif k == "type" and v == "IfStatement":
+                # Found an IfStatement
+                json_dict[KEY_IF_AST].append(value)
+                json_dict[KEY_START_LINE].append(value["loc"]["start"]["line"])
+                condition = value["test"]
+                type = condition["type"]
+                if type in expressions.keys():
+                    expressions[type].update(list(condition.keys()))
+                else:
+                    expressions[type] = set(list(condition.keys()))
+
+    elif isinstance(value, list):
+        for i in value:
+            dict_visitor(i, json_dict, expressions)
+
+
+def create_result(json_dict):
+    predicted_results = defaultdict(list)
+    lens = [len(d[KEY_START_LINE]) for d in json_dict.values()]
+    num_ifs = sum(lens)
+    #print(num_ifs)
+
+    i=int(num_ifs/2)
+    for path, d in json_dict.items():
+        predicted_results[path] = d[KEY_START_LINE][:i]
+        i = i - len(d[KEY_START_LINE])
+        if i <= 0:
+            break
+
+    return dict(predicted_results)
