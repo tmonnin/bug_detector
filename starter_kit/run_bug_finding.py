@@ -171,9 +171,9 @@ def create_result(json_dict):
     predicted_results = defaultdict(list)
     lens = [len(d[KEY_START_LINE]) for d in json_dict.values()]
     num_ifs = sum(lens)
-    #print(num_ifs)
+    print("Number of if statements:", str(num_ifs))
 
-    i=int(num_ifs/2)
+    i=int(num_ifs/4)
     for path, d in json_dict.items():
         predicted_results[path] = d[KEY_START_LINE][:i]
         i = i - len(d[KEY_START_LINE])
