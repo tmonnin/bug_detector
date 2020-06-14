@@ -167,6 +167,24 @@ def dict_visitor(value, json_dict, expressions):
             dict_visitor(i, json_dict, expressions)
 
 
+def dict_visitor_(value, json_dict):
+
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if isinstance(v, dict):
+                dict_visitor_(v, json_dict)
+            elif isinstance(v, list):
+                for i in v:
+                    dict_visitor_(i, json_dict)
+            elif k == "type" and v == "IfStatement":
+                # Found an IfStatement
+                json_dict[KEY_IF_AST].append(value)
+                json_dict[KEY_START_LINE].append(value["loc"]["start"]["line"])
+
+    elif isinstance(value, list):
+        for i in value:
+            dict_visitor_(i, json_dict)
+
 def create_result(json_dict):
     predicted_results = defaultdict(list)
     lens = [len(d[KEY_START_LINE]) for d in json_dict.values()]
