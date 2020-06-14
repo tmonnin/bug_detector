@@ -1,0 +1,20 @@
+..\..\json_files\10369_6787_a_component-3-patt-F-model.json
+params.op[0] === "splice" && (   params.op.length !== 3 || typeof params.op[1] !== "number" || typeof params.op[2] !== "number")
+
+
+..\..\json_files\10525_6177_b_ve.ce.ContentBranchNode.json
+if (this.root instanceof ve.ce.DocumentNode &&  this.root.getSurface().isRenderingLocked()) {}
+
+
+..\..\json_files\1084_7251_c_GeometryPipeline.json
+if (attributes.hasOwnProperty(property) && defined(attributes[property]) && defined(attributes[property].values))
+
+
+..\..\json_files\1084_7251_c_GeometryPipeline.json
+if ((defined(geometry.indices)) && ((geometry.primitiveType !== PrimitiveType.TRIANGLES) && (geometry.primitiveType !== PrimitiveType.LINES) && (geometry.primitiveType !== PrimitiveType.POINTS)))
+
+
+..\..\json_files\1084_7251_c_GeometryPipeline.json
+if ((!defined(otherAttribute)) || (attribute.componentDatatype !== otherAttribute.componentDatatype) || (attribute.componentsPerAttribute !== otherAttribute.componentsPerAttribute) || (attribute.normalize !== otherAttribute.normalize))
+
+

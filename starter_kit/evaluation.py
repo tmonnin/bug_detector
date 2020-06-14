@@ -69,7 +69,8 @@ def evaluation(input_dir: str, out_file: str) -> None:
 
 
 def run() -> None:
-    if len(sys.argv) == 1:  # Use the default input and output directories if no arguments are provided
+    if len(sys.argv) != 3:  # Use the default input and output directories if no arguments are provided
+        print("Wrong arguments provided")
         return
     else:
         input_dir = sys.argv[1]

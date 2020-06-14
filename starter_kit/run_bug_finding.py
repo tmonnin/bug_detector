@@ -10,7 +10,7 @@ import codecs
 import logging
 
 ### Pre-defined
-KEY_SOURCE = 'raw_source_code'
+KEY_CODE = 'raw_source_code'
 KEY_AST = 'ast'
 KEY_TOKENS = 'tokenList'
 KEY_TOKENRANGE = 'tokenRangesList'
@@ -110,7 +110,7 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
 
 def print_json(j):
     print("AST", j[KEY_AST])
-    print("Source", j[KEY_SOURCE])
+    print("Source", j[KEY_CODE])
     print("TokenList", j[KEY_TOKENS])
     print("TokenRange", j[KEY_TOKENRANGE])
 

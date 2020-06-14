@@ -1,0 +1,43 @@
+Unary
+! - not (case 4)
+https://scotch.io/tutorials/javascript-unary-operators-simple-and-useful#toc-summary-of-all-unary-operators
+
+Unary plus (+)	Tries to convert the operand into a number
+*Unary negation (-) *	Tries to convert the operand into a number and negates after
+Logical Not (!)	Converts to boolean value then negates it
+Increment (++)	Adds one to its operand
+Decrement (--)	Decrements by one from its operand
+Bitwise not (~)	Inverts all the bits in the operand and returns a number
+typeof	Returns a string which is the type of the operand
+delete	Deletes specific index of an array or specific property of an object
+void	Discards a return value of an expression.
+
+Binary
+
+https://stackoverflow.com/questions/12122293/list-of-all-binary-operators-in-javascript
+
+Multiplicative Operators
+The * Operator
+The / Operator
+The % Operator
+Additive Operators
+The Addition operator (+)
+The Subtraction Operator (-)
+Bitwise Shift Operators
+The Left Shift Operator (<<)
+The Signed Right Shift Operator (>>)
+The Unsigned Right Shift Operator (>>>)
+Relational Operators
+The Less-than Operator (<)
+The Greater-than Operator (>)
+The Less-than-or-equal Operator (<=)
+The Greater-than-or-equal Operator (>=)
+The instanceof operator
+The in operator
+Equality Operators
+The Equals Operator (==)
+The Does-not-equals Operator (!=)
+The Strict Equals Operator (===)
+The Strict Does-not-equal Operator (!==)
+Binary Bitwise Operators (&, ^, |)
+Binary Logical Operators (&&, ||)

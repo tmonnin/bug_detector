@@ -2,3 +2,7 @@
 #  File "C:\Users\tmonn\Desktop\Uni_Str\Analyzing Software using Deep Learning\starter_kit\run_bug_finding.py", line 104, in find_bugs_in_js_files
 #    token_list = j["tokenList"]
 #TypeError: list indices must be integers or slices, not str
+
+
+
+
