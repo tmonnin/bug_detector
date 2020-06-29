@@ -3,6 +3,98 @@
 #    token_list = j["tokenList"]
 #TypeError: list indices must be integers or slices, not str
 
+The graph neural network model
+https://ieeexplore.ieee.org/abstract/document/4700287/
+
+Semi-supervised classification with graph convolutional networks
+https://arxiv.org/abs/1609.02907
+
+
+Tree-Based Convolutional Neural Network
+The “Continuous Binary Tree” Model
+
+Convolutional Neural Networks over Tree Structures for Programming Language Processing
+https://arxiv.org/pdf/1409.5718.pdf
+
+
+H. Liang et al.: Deep Learning With Customized Abstract Syntax Tree for Bug Localization
+https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=8809752
 
 
 
+
+UnaryExpression
+{'range', 'prefix', 'operator', 'type', 'argument', 'loc'}
+    type=type, property=operator, left=argument, right=None
+
+if (!a) {}
+
+BinaryExpression
+{'range', 'right', 'operator', 'type', 'loc', 'left'}
+    type=type, property=operator, left=left, right=right
+
+if (a << b) {}
+
+CallExpression
+{'callee', 'type', 'range', 'loc', 'arguments'}
+    type=type, property=None, left=callee, right=arguments
+
+if (func()) {}
+if (a.b()) {}
+arguments are list --> must be converted to nested or fused together
+--> not relevant for now
+
+MemberExpression
+{'computed', 'property', 'range', 'type', 'loc', 'object'}
+    type=type, property=None, left=object, right=property
+
+computed - not relevant
+
+if (a.b) {}
+if (a().b) {}
+
+
+Literal
+{'raw', 'value', 'range', 'loc', 'type'}
+    type=type, property=raw, left=None, right=None
+
+if (5) {}
+
+
+AssignmentExpression
+{'range', 'right', 'operator', 'type', 'loc', 'left'}
+    type=type, property=operator, left=left, right=right
+
+
+LogicalExpression
+{'range', 'right', 'operator', 'type', 'loc', 'left'}
+    type=type, property=operator, left=left, right=right
+
+
+if (a("b" || 5 || 6)) {} --> nested Logical Expressions with left and right argument
+
+
+Identifier
+{'name', 'type', 'range', 'loc'}
+    type=type, property=name, left=None, right=None
+
+ThisExpression
+{'range', 'loc', 'type'}
+
+if (this) {}
+
+FunctionExpression
+
+RegExp
+if(new RegExp("("+ k +")").test(format)) {}
+
+UpdateExpression
+
+STRUCTURE
+
+type
+property (operator/name/value)
+left (left/argument)
+right
+
+TODO statistic over #instances per expression type
