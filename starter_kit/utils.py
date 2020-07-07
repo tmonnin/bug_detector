@@ -1,7 +1,7 @@
 import os
 import torch
 
-from torch_geometric.data import Data
+#from torch_geometric.data import Data
 
 from model import Net
 
@@ -31,7 +31,7 @@ def generate_data_dict(if_ast, token_embedding, y=None):
     # if len(x) < 5:
     #    continue
     # x=x.unsqueeze(0).unsqueeze(0)
-    data = Data(x=type_oh, edge_index=edge_index)
+    data = None #Data(x=type_oh, edge_index=edge_index)
     data_dict = {'type_oh': type_oh, 'property_ft': property_ft, 'data': data}
     label = -1
     if y is not None:

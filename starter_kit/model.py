@@ -3,9 +3,9 @@ import torch.nn.functional as F
 import torch
 import torch.utils
 from torch.autograd import Variable
-from torch_geometric.nn import GCNConv
-from torch_geometric import transforms
-import torch_geometric
+#from torch_geometric.nn import GCNConv
+#from torch_geometric import transforms
+#import torch_geometric
 
 class Net(nn.Module):
 
