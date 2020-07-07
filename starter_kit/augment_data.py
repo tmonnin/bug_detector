@@ -8,7 +8,7 @@ import json
 import os
 import utils
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 
 def augment(input_dir, output_dir):
@@ -18,7 +18,7 @@ def augment(input_dir, output_dir):
     json_dict = defaultdict(dict)
     res_dict = defaultdict(list)
     aug_count_dict = defaultdict(lambda: 0)
-    for path in list_of_json_file_paths[0:1000]:
+    for index, path in enumerate(list_of_json_file_paths):#[0:10000]:
         try:
             res_path = os.path.splitext(os.path.join(output_dir, os.path.basename(path)))
             if not os.path.exists(res_path[0] + "_0" + res_path[1]):
@@ -28,18 +28,22 @@ def augment(input_dir, output_dir):
                 code = j[run_bug_finding.KEY_CODE]
                 logging.debug("Code: " + str(code))
                 ast = j[run_bug_finding.KEY_AST]
+                token = j[run_bug_finding.KEY_TOKENS]
+                token_range = j[run_bug_finding.KEY_TOKENRANGE]
+
                 json_dict[path] = defaultdict(list)
                 run_bug_finding.dict_visitor_(ast, json_dict[path])
+                # TODO skip test conditions that are too large
                 for if_ast in json_dict[path][run_bug_finding.KEY_IF_AST]:
                     condition = utils.extract(if_ast["test"]["loc"], code)
-                    logging.info("Condition: " + str(condition))
+                    logging.debug("Condition: " + str(condition))
                     one_augmented = False
                     for aug_function in [incomplete_conditional, incorrectly_ordered_boolean, wrong_identifier, negated_condition, wrong_operator]:
                         if_ast_copy = deepcopy(if_ast)
                         is_augmented = aug_function(if_ast_copy, code)
                         if is_augmented:
                             res_dict[path].append([if_ast_copy, 1])
-                            logging.info("Augmented: " + str(aug_function))
+                            logging.debug("Augmented: " + str(aug_function))
                             aug_count_dict[aug_function] += 1
                             one_augmented = True
                         #bin_tree = utils.ConditionalHandler(code, condition, if_ast_copy)
@@ -51,7 +55,7 @@ def augment(input_dir, output_dir):
                 for i, res in enumerate(res_dict[path]):
                     output_path = res_path[0] + "_" + str(i) + res_path[1]
                     with open(output_path, 'w') as out_file:
-                        json.dump(res_dict[path][i], out_file)
+                        pass#json.dump(res_dict[path][i], out_file)
 
         except Exception as e:
             logging.error("Exception in file " + path)
@@ -59,12 +63,13 @@ def augment(input_dir, output_dir):
             raise e
 
         logging.info(aug_count_dict.items())
-
+        logging.info(str(index) + "/" + str(len(list_of_json_file_paths)))
 
 def incomplete_conditional(if_ast: dict, code):
     if if_ast["test"]["type"] == "LogicalExpression":
         if_ast["test"] = if_ast["test"]["left"]
         #if_ast["test"] = if_ast["test"]["right"]
+        # TODO consider alternatives
         return True
 
 
@@ -72,7 +77,7 @@ def incorrectly_ordered_boolean(if_ast: dict, code):
     if if_ast["test"]["type"] == "LogicalExpression" and if_ast["test"]["operator"] == "&&":
         code_left = utils.extract(if_ast["test"]["left"]["loc"], code)
         code_right = utils.extract(if_ast["test"]["right"]["loc"], code)
-        if code_left in code_right:
+        if code_left in code_right: # TODO similarity
             tmp = if_ast["test"]["left"]
             if_ast["test"]["left"] = if_ast["test"]["right"]
             if_ast["test"]["right"] = tmp
@@ -107,7 +112,7 @@ def wrong_operator(if_ast: dict, code):
         elif if_ast["test"]["operator"] == ">":
             if_ast["test"]["operator"] = "<"
             return True
-
+        # TODO equals, shift operator
 
 def run() -> None:
     if len(sys.argv) != 3:
