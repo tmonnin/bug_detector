@@ -39,7 +39,7 @@ class Net(nn.Module):
 
         self.params = {'batch_size': 32,
                        'shuffle': True,
-                       'num_workers': 8}
+                       'num_workers': 0}
 
     def forward(self, type_oh, property_ft):
         #[type_oh, property] = data #, edge_index, edge_weight = data.x, data.edge_index, data.edge_attr
@@ -89,7 +89,7 @@ class Net(nn.Module):
                     import traceback
                     traceback.print_exc()
                     print("FAIL")
-                    continue
+                    raise
                 pred = net_out.to(torch.float32)
                 loss = self.criterion(pred, target)
                 correct_pred = torch.eq(pred.round(), target)
@@ -101,13 +101,31 @@ class Net(nn.Module):
                 loss_avg += loss.data
                 i += 1
                 optimizer.step()
-                if batch_idx * self.params['batch_size'] % 100 == 0:
+                if batch_idx * self.params['batch_size'] % 1000 == 0:
                     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                            epoch, batch_idx * len(data), len(training_generator.dataset),
+                            epoch, batch_idx * self.params['batch_size'], len(training_generator.dataset),
                                    100. * batch_idx / len(training_generator), loss.data))
             print('Train Epoch: {} \tLoss: {:.4f} \tAcc: {:.4f}'.format(epoch, loss_avg/i, count_correct / (count_correct+count_wrong)))
 
             torch.save(self.state_dict(), "model")
+
+    def classify(self, data_set):
+        test_set = Dataset(data_set)
+        test_generator = torch.utils.data.DataLoader(test_set, **self.params) # torch_geometric.data.DataLoader(test_set, **self.params)
+        test_loss = 0
+        correct = 0
+        for data, target in test_generator:
+            data, target = Variable(data, volatile=True), Variable(target)
+            net_out = self(data)
+            # sum up batch loss
+            test_loss += self.criterion(net_out, target).data[0]
+            pred = net_out.data.max(1)[1]  # get the index of the max log-probability
+            correct += pred.eq(target.data).sum()
+
+        test_loss /= len(test_generator.dataset)
+        print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+            test_loss, correct, len(test_generator.dataset),
+            100. * correct / len(test_generator.dataset)))
 
     def test(self, test_set):
         test_set = Dataset(test_set)
