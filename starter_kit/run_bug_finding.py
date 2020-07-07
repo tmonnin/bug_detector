@@ -8,6 +8,7 @@ from collections import defaultdict
 import json
 import codecs
 import logging
+import utils
 
 ### Pre-defined
 KEY_CODE = 'raw_source_code'
@@ -18,6 +19,9 @@ KEY_TOKENRANGE = 'tokenRangesList'
 ### Self-defined
 KEY_START_LINE = 'start_line'
 KEY_IF_AST = 'if_ast'
+KEY_IS_BUG = 'is_bug'
+
+model_path = "model"
 
 def read_json_file(json_file_path: str) -> List:
     """ Read a JSON file given path """
@@ -31,6 +35,7 @@ def read_json_file(json_file_path: str) -> List:
         return []
     except Exception as e:
         # Most likely malformed JSON file
+        print("Error loading JSON " + json_file_path)
         return []
 
 
@@ -72,6 +77,9 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
     expressions = {}
     log_level = logging.INFO
     logging.basicConfig(level=log_level)
+    cur_dir_path = os.path.dirname(os.path.realpath(__file__))
+    model_path_full = os.path.join(cur_dir_path, model_path)
+    net = utils.load_model(model_path_full)
 
     #if log_level == logging.DEBUG:
     list_of_json_file_paths = list_of_json_file_paths#[0:50]
@@ -82,17 +90,25 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
             # print(j.keys())
             # dict_keys(['tokenList', 'raw_source_code', 'ast', 'tokenRangesList'])
 
-            #logging.debug("Source")
-            #logging.debug(j[KEY_SOURCE])
+            logging.debug("Code")
+            logging.debug(j[KEY_CODE])
             json_dict[path] = defaultdict(list)
-            dict_visitor(j[KEY_AST], json_dict[path], expressions)
+            dict_visitor_(j[KEY_AST], json_dict[path])
+
+            for if_ast in json_dict[path][KEY_IF_AST]:
+                data_dict = utils.generate_data_dict(if_ast, token_embedding)
+                pred = net(data_dict['type_oh'].unsqueeze(0), data_dict['property_ft'].unsqueeze(0))
+                is_bug = (pred[0][0] >= 0.5)
+                json_dict[path][KEY_IS_BUG].append(is_bug)
+
             #print_expressions(expressions)
             logging.debug(json_dict[path][KEY_START_LINE])
 
         except Exception as e:
             logging.error("Exception in file " + path)
             logging.error(e)
-
+            import traceback
+            traceback.print_exc()
 
     result_dict = create_result(json_dict)
     return result_dict
@@ -151,7 +167,7 @@ def dict_visitor(value, json_dict, expressions):
             elif isinstance(v, list):
                 for i in v:
                     dict_visitor(i, json_dict, expressions)
-            elif k == "type" and v == "IfStatement":
+            elif k == "type" and v == "IfStatement": # TODO change to constants
                 # Found an IfStatement
                 json_dict[KEY_IF_AST].append(value)
                 json_dict[KEY_START_LINE].append(value["loc"]["start"]["line"])
@@ -179,7 +195,7 @@ def dict_visitor_(value, json_dict):
             elif k == "type" and v == "IfStatement":
                 # Found an IfStatement
                 json_dict[KEY_IF_AST].append(value)
-                json_dict[KEY_START_LINE].append(value["loc"]["start"]["line"])
+                #json_dict[KEY_START_LINE].append([value["loc"]["start"]["line"], value["loc"]["end"]["line"]])
 
     elif isinstance(value, list):
         for i in value:
@@ -187,15 +203,11 @@ def dict_visitor_(value, json_dict):
 
 def create_result(json_dict):
     predicted_results = defaultdict(list)
-    lens = [len(d[KEY_START_LINE]) for d in json_dict.values()]
-    num_ifs = sum(lens)
-    print("Number of if statements:", str(num_ifs))
-
-    i=int(num_ifs/4)
     for path, d in json_dict.items():
-        predicted_results[path] = d[KEY_START_LINE][:i]
-        i = i - len(d[KEY_START_LINE])
-        if i <= 0:
-            break
-
+        for i in range(len(d[KEY_IS_BUG])):
+            line_begin = d[KEY_IF_AST][i]['test']['loc']['start']['line']
+            line_end = d[KEY_IF_AST][i]['test']['loc']['end']['line']
+            if d[KEY_IS_BUG][i]:
+                for line in range(line_begin, line_end + 1): # TODO check if all lines of if statement are relevant
+                    predicted_results[path].append(line)
     return dict(predicted_results)
