@@ -5,9 +5,9 @@ import torch.utils
 from torch.nn.utils.rnn import pack_sequence, pad_sequence, pad_packed_sequence
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
-from torch_geometric.nn import GCNConv
-from torch_geometric import transforms
-import torch_geometric
+#from torch_geometric.nn import GCNConv
+#from torch_geometric import transforms
+#import torch_geometric
 
 class Net(nn.Module):
 
