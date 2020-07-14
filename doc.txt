@@ -84,6 +84,9 @@ ThisExpression
 if (this) {}
 
 FunctionExpression
+if (function f(){}) {}
+if (function (){}) {} # anonymous
+['vals', '.', 'join', '()', '.', 'replace', '()', '!==', "''"]
 
 RegExp
 if(new RegExp("("+ k +")").test(format)) {}
