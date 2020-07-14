@@ -11,7 +11,21 @@ class ConditionalHandler:
         self.condition = condition # extract(if_ast["test"]["loc"], code)
         self.bin_tree = BinTree(if_ast["test"])
 
-def generate_data_dict(if_ast, token_embedding, y=None):
+def generate_data_dict_sequence(if_ast, token_embedding, y=None):
+    conditional_handler = ConditionalHandler(None, None, if_ast)
+    type_int_lst = []
+    property_embedding_lst = []
+    conditional_handler.bin_tree.to_sequence(type_int_lst, property_embedding_lst, token_embedding)
+
+    data_dict = {'type_int_lst': type_int_lst, 'property_emb_lst': property_embedding_lst}
+    label = -1
+    if y is not None:
+        label = torch.tensor([y], dtype=torch.float32)
+    data_dict['label'] = label
+
+    return data_dict
+
+def generate_data_dict_flattened(if_ast, token_embedding, y=None):
     conditional_handler = ConditionalHandler(None, None, if_ast)
     x_lst = []
     edge_lst = []
@@ -42,6 +56,7 @@ def generate_data_dict(if_ast, token_embedding, y=None):
 
 
 class BinTree:
+
     def __init__(self, ast):
         if ast is None:
             # TODO remove
@@ -68,10 +83,12 @@ class BinTree:
             self.right= BinTree(ast["right"])
         elif ast["type"] == "CallExpression":
             self.type=3
+            self.property="()"
             self.left=BinTree(ast["callee"])
             self.right=None#BinTree(ast["arguments"][0])
         elif ast["type"] == "MemberExpression":
             self.type=4
+            self.property="."
             self.left=BinTree(ast["object"])
             self.right=BinTree(ast["property"])
         elif ast["type"] == "Literal":
@@ -92,10 +109,16 @@ class BinTree:
             self.property=ast["name"]
         elif ast["type"] == "ThisExpression":
             self.type=9
+            self.property="this"
         elif ast["type"] == "FunctionExpression":
             self.type=10
+            try:
+                self.property=ast["id"]["name"]
+            except TypeError: # anonymous function
+                self.property="function"
         elif ast["type"] == "NewExpression":
             self.type=11
+            self.property="new"
         elif ast["type"] == "UpdateExpression":
             self.type=12
             self.property = ast["operator"]
@@ -110,7 +133,6 @@ class BinTree:
         #    print(ast.keys())
         #    print(ast["type"])
         #    print("MISSED")
-
 
     def to_list(self, x_lst, edge_lst, token_embedding):
         idx = len(x_lst)
@@ -129,30 +151,14 @@ class BinTree:
             edge_lst.append([idx_right, idx])
         return idx
 
-    def to_tokens(self, x_lst, edge_lst, token_embedding):
-
-        idx = len(x_lst)
-        property_ft = torch.tensor(token_embedding[str(self.property)])
-        target = self.type
-
+    def to_sequence(self, type_int_lst, property_embedding_lst, token_embedding):
+        property_embedding = torch.tensor(token_embedding[str(self.property)])
         if self.left is not None:
-            idx_left = self.left.to_tokens(x_lst, edge_lst, token_embedding)
-            edge_lst.append([idx, idx_left])
-            edge_lst.append([idx_left, idx])
-        else:
-            for i in range(2**(depth-1)-1):
-                x_lst.append([0, torch.zeros(1,100)])
-        #type_oh = torch.zeros(13, dtype=torch.int)
-        #type_oh[range(type_oh.shape[0]), target] = 1
-        x_lst.append([self.type, property_ft])
+            self.left.to_sequence(type_int_lst, property_embedding_lst, token_embedding)
+        type_int_lst.append(torch.tensor(self.type))
+        property_embedding_lst.append(property_embedding)
         if self.right is not None:
-            idx_right = self.right.to_tokens(x_lst, edge_lst, token_embedding)
-            edge_lst.append([idx, idx_right])
-            edge_lst.append([idx_right, idx])
-        else:
-            for i in range(2**(depth-1)-1):
-                x_lst.append([0, torch.zeros(1,100)])
-        return idx
+            self.right.to_sequence(type_int_lst, property_embedding_lst, token_embedding)
 
     def to_flattened(self, x_lst, edge_lst, token_embedding, depth):
         if depth == 0:
