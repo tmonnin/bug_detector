@@ -38,8 +38,7 @@ def run():
         if not json_file in data_dict.keys():
             logging.info(str(index) + "/" + str(len(list_of_json_file_paths)) + " - " + json_file)
             if_ast, y = read_json_file(json_file)
-            data_dict[json_file] = utils.generate_data_dict(if_ast, token_embedding, y)
-            #print(data.is_undirected())
+            data_dict[json_file] = utils.generate_data_dict_sequence(if_ast, token_embedding, y)
 
     if len_initial < len(data_dict):
         logging.info("Save new dict")
