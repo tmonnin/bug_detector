@@ -96,10 +96,11 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
             dict_visitor_(j[KEY_AST], json_dict[path])
 
             for if_ast in json_dict[path][KEY_IF_AST]:
-                data_dict = utils.generate_data_dict(if_ast, token_embedding)
-                pred = net(data_dict['type_oh'].unsqueeze(0), data_dict['property_ft'].unsqueeze(0))
-                is_bug = (pred[0][0] >= 0.5)
-                json_dict[path][KEY_IS_BUG].append(is_bug)
+                data_dict = utils.generate_data_dict_sequence(if_ast, token_embedding)
+                is_bug = net.classify([data_dict])
+                #pred = net(data_dict['type_int_lst'].unsqueeze(0), data_dict['property_emb_lst'].unsqueeze(0))
+                #is_bug = (pred[0][0] >= 0.5) # TODO finetune for tradeoff precision and recall
+                json_dict[path][KEY_IS_BUG] += is_bug
 
             #print_expressions(expressions)
             logging.debug(json_dict[path][KEY_START_LINE])
