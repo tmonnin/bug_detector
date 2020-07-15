@@ -309,7 +309,7 @@ def create_result(json_dict):
 def weighted_distribution(labels, distribution):
     class_sample_count = np.unique(labels, return_counts=True)
     print(class_sample_count)
-    assert len(class_sample_count) == 6
+    assert len(class_sample_count[1]) == 6
     class_p = []
     for p, n_i in zip(distribution, class_sample_count[1]):
         class_p.append(p/n_i)
