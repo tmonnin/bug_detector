@@ -21,8 +21,8 @@ def augment(input_dir, output_dir):
     aug_count_dict = defaultdict(lambda: 0)
     for index, path in enumerate(list_of_json_file_paths):#[0:10000]:
         try:
-            res_path = os.path.splitext(os.path.join(output_dir, os.path.basename(path)))
-            if not os.path.exists(res_path[0] + "_0" + res_path[1]):
+            res_path = os.path.join(output_dir, os.path.basename(path))
+            if not os.path.exists(res_path):
                 logging.info(path)
                 j = run_bug_finding.read_json_file(path)
 
@@ -40,8 +40,8 @@ def augment(input_dir, output_dir):
                     condition = utils.extract(if_ast["test"]["loc"], code)
                     #print(condition)
                     # Skip test conditions that are too large TODO senseful?
-                    if len(condition) > 100:
-                        continue
+                    #if len(condition) > 100:
+                    #    continue
 
                     code_adjacent = utils.extract(if_ast["test"]["loc"], code, padding=5, skip_condition=True, return_list=True)
                     #print(code_adjacent)
@@ -58,10 +58,8 @@ def augment(input_dir, output_dir):
                             logging.debug("Augmented: " + str(aug_function))
                             aug_count_dict[str(label)] += 1
 
-                for i, res in enumerate(res_dict[path]):
-                    output_path = res_path[0] + "_" + str(i) + res_path[1]
-                    with open(output_path, 'w') as out_file:
-                        json.dump(res_dict[path][i], out_file)
+                with open(res_path, 'w') as out_file:
+                    json.dump(res_dict[path], out_file)
 
         except Exception as e:
             logging.error("Exception in file " + path)
