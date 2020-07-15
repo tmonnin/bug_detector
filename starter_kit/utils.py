@@ -305,3 +305,17 @@ def create_result(json_dict):
                 for line in range(line_begin, line_end + 1): # TODO check if all lines of if statement are relevant
                     predicted_results[path].append(line)
     return dict(predicted_results)
+
+def weighted_distribution(labels, distribution):
+    class_sample_count = np.unique(labels, return_counts=True)
+    print(class_sample_count)
+    assert len(class_sample_count) == 6
+    class_p = []
+    for p, n_i in zip(distribution, class_sample_count[1]):
+        class_p.append(p/n_i)
+    print(class_p)
+    weights = []
+    for label in labels:
+        weights.append(class_p[label])
+
+    return weights
