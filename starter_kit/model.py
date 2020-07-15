@@ -5,9 +5,9 @@ import torch.utils
 from torch.nn.utils.rnn import pack_sequence, pad_sequence, pad_packed_sequence
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
-#from torch_geometric.nn import GCNConv
-#from torch_geometric import transforms
-#import torch_geometric
+from torch_geometric.nn import GCNConv
+from torch_geometric import transforms
+import torch_geometric
 
 class Net(nn.Module):
 
@@ -51,9 +51,6 @@ class Net(nn.Module):
         self.criterion = nn.BCELoss()
 
         self.params = {'batch_size': 32,
-                       'shuffle': True,
-                       'num_workers': 0}
-        self.params_classify = {'batch_size': 32,
                        'shuffle': False,
                        'num_workers': 0}
 
@@ -109,9 +106,10 @@ class Net(nn.Module):
         x = torch.sigmoid(x)
         return x
 
-    def train(self, train_set, learning_rate, epochs):
+    def train(self, train_set, learning_rate, epochs, weights):
         training_set = Dataset(train_set)
-        training_generator = torch.utils.data.DataLoader(training_set, **self.params, collate_fn=training_set.pad_collate) # torch_geometric.data.DataLoader(training_set, **self.params)
+        weighted_sampler = torch.utils.data.WeightedRandomSampler(weights, len(training_set), replacement=True)
+        training_generator = torch.utils.data.DataLoader(training_set, **self.params, collate_fn=training_set.pad_collate, sampler=weighted_sampler) # torch_geometric.data.DataLoader(training_set, **self.params)
 
         # create a stochastic gradient descent optimizer
         optimizer = torch.optim.Adam(self.parameters())# SGD(self.parameters(), lr=learning_rate, momentum=0.2)
@@ -148,7 +146,7 @@ class Net(nn.Module):
 
     def classify(self, data_set):
         classify_set = Dataset(data_set)
-        test_generator = torch.utils.data.DataLoader(classify_set, **self.params_classify, collate_fn=classify_set.pad_collate) # torch_geometric.data.DataLoader(test_set, **self.params)
+        test_generator = torch.utils.data.DataLoader(classify_set, **self.params, collate_fn=classify_set.pad_collate) # torch_geometric.data.DataLoader(test_set, **self.params)
         is_bug = []
         for batch_idx, (type_batch_pad, property_batch_pad, target_batch, pad_lens) in enumerate(test_generator):
             net_out = self(type_batch_pad, property_batch_pad, pad_lens)
