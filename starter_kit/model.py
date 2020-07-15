@@ -123,12 +123,13 @@ class Net(nn.Module):
             count_correct = 0.0
             count_wrong = 0.0
             i = 0
-            for batch_idx, (type_batch_pad, property_batch_pad, target_batch, pad_lens) in enumerate(training_generator):
+            for batch_idx, (type_batch_pad, property_batch_pad, label_batch, pad_lens) in enumerate(training_generator):
                 # TODO why Variable? Necessary?
                 #data, target = Variable(data), Variable(target)
                 optimizer.zero_grad()
                 net_out = self(type_batch_pad, property_batch_pad, pad_lens)
                 pred = net_out.to(torch.float32).squeeze(1)
+                target_batch = torch.where(label_batch == 0, torch.zeros_like(label_batch, dtype=torch.float), torch.ones_like(label_batch, dtype=torch.float))
                 loss = self.criterion(pred, target_batch)
                 correct_pred = torch.eq(pred.round(), target_batch)
                 count_correct += (correct_pred == True).sum()
