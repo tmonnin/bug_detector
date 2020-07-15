@@ -74,7 +74,7 @@ def incorrectly_ordered_boolean(if_ast: dict, code, code_identifier_lst):
 def wrong_identifier(if_ast: dict, code, code_identifier_lst):
     code_condition_padded = utils.extract(if_ast["test"]["loc"], code, padding=5)
     condition_identifier_lst = []
-    utils.dict_visitor(if_ast, identifiers=condition_identifier_lst)
+    utils.dict_visitor(if_ast["test"], identifiers=condition_identifier_lst)
     if len(condition_identifier_lst):
         identifier_to_augment = random.choice(condition_identifier_lst)
         # TODO identifier must stand alone?
@@ -85,6 +85,7 @@ def wrong_identifier(if_ast: dict, code, code_identifier_lst):
                 # TODO choose most similar identifier
                 # TODO near neighborhood could be feasible
                 identifier_to_augment["name"] = identifier["name"]
+                random.shuffle(code_identifier_lst)
                 return True
 
 def negated_condition_remove(if_ast: dict, code, code_identifier_lst):
