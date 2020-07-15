@@ -10,16 +10,7 @@ import codecs
 import logging
 import utils
 
-### Pre-defined
-KEY_CODE = 'raw_source_code'
-KEY_AST = 'ast'
-KEY_TOKENS = 'tokenList'
-KEY_TOKENRANGE = 'tokenRangesList'
 
-### Self-defined
-KEY_START_LINE = 'start_line'
-KEY_IF_AST = 'if_ast'
-KEY_IS_BUG = 'is_bug'
 
 model_path = "model"
 
@@ -91,19 +82,17 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
             # dict_keys(['tokenList', 'raw_source_code', 'ast', 'tokenRangesList'])
 
             logging.debug("Code")
-            logging.debug(j[KEY_CODE])
+            logging.debug(j[utils.KEY_CODE])
             json_dict[path] = defaultdict(list)
-            dict_visitor_(j[KEY_AST], json_dict[path])
+            utils.dict_visitor(j[utils.KEY_AST], json_dict[path])
 
-            for if_ast in json_dict[path][KEY_IF_AST]:
+            for if_ast in json_dict[path][utils.KEY_IF_AST]:
                 data_dict = utils.generate_data_dict_sequence(if_ast, token_embedding)
                 is_bug = net.classify([data_dict])
-                #pred = net(data_dict['type_int_lst'].unsqueeze(0), data_dict['property_emb_lst'].unsqueeze(0))
-                #is_bug = (pred[0][0] >= 0.5) # TODO finetune for tradeoff precision and recall
-                json_dict[path][KEY_IS_BUG] += is_bug
+                json_dict[path][utils.KEY_IS_BUG] += is_bug
 
-            #print_expressions(expressions)
-            logging.debug(json_dict[path][KEY_START_LINE])
+            #utils.print_expressions(expressions)
+            logging.debug(json_dict[path][utils.KEY_START_LINE])
 
         except Exception as e:
             logging.error("Exception in file " + path)
@@ -111,7 +100,7 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
             import traceback
             traceback.print_exc()
 
-    result_dict = create_result(json_dict)
+    result_dict = utils.create_result(json_dict)
     return result_dict
 
 # TODO
@@ -125,90 +114,3 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
 # Define binary cross entropy loss
 
 
-def print_json(j):
-    print("AST", j[KEY_AST])
-    print("Source", j[KEY_CODE])
-    print("TokenList", j[KEY_TOKENS])
-    print("TokenRange", j[KEY_TOKENRANGE])
-
-
-def count_unique(list):
-    values, counts = np.unique(list, return_counts=True)
-    print(values)
-    print(counts)
-
-
-def print_expressions(expressions):
-    for k, v in expressions.items():
-        print(k, v)
-    # UnaryExpression
-    # {'range', 'prefix', 'operator', 'type', 'argument', 'loc'}
-    # BinaryExpression
-    # {'range', 'right', 'operator', 'type', 'loc', 'left'}
-    # CallExpression
-    # {'callee', 'type', 'range', 'loc', 'arguments'}
-    # MemberExpression
-    # {'computed', 'property', 'range', 'type', 'loc', 'object'}
-    # Literal
-    # {'raw', 'value', 'range', 'loc', 'type'}
-    # AssignmentExpression
-    # {'range', 'right', 'operator', 'type', 'loc', 'left'}
-    # LogicalExpression
-    # {'range', 'right', 'operator', 'type', 'loc', 'left'}
-    # Identifier
-    # {'name', 'type', 'range', 'loc'}
-
-
-def dict_visitor(value, json_dict, expressions):
-
-    if isinstance(value, dict):
-        for k, v in value.items():
-            if isinstance(v, dict):
-                dict_visitor(v, json_dict, expressions)
-            elif isinstance(v, list):
-                for i in v:
-                    dict_visitor(i, json_dict, expressions)
-            elif k == "type" and v == "IfStatement": # TODO change to constants
-                # Found an IfStatement
-                json_dict[KEY_IF_AST].append(value)
-                json_dict[KEY_START_LINE].append(value["loc"]["start"]["line"])
-                condition = value["test"]
-                type = condition["type"]
-                if type in expressions.keys():
-                    expressions[type].update(list(condition.keys()))
-                else:
-                    expressions[type] = set(list(condition.keys()))
-
-    elif isinstance(value, list):
-        for i in value:
-            dict_visitor(i, json_dict, expressions)
-
-
-def dict_visitor_(value, json_dict):
-
-    if isinstance(value, dict):
-        for k, v in value.items():
-            if isinstance(v, dict):
-                dict_visitor_(v, json_dict)
-            elif isinstance(v, list):
-                for i in v:
-                    dict_visitor_(i, json_dict)
-            elif k == "type" and v == "IfStatement":
-                # Found an IfStatement
-                json_dict[KEY_IF_AST].append(value)
-                #json_dict[KEY_START_LINE].append([value["loc"]["start"]["line"], value["loc"]["end"]["line"]])
-
-    elif isinstance(value, list):
-        for i in value:
-            dict_visitor_(i, json_dict)
-
-def create_result(json_dict):
-    predicted_results = defaultdict(list)
-    for path, d in json_dict.items():
-        for i in range(len(d[KEY_IS_BUG])):
-            line_begin = d[KEY_IF_AST][i]['test']['loc']['start']['line']
-            line_end = d[KEY_IF_AST][i]['test']['loc']['end']['line']
-            if d[KEY_IS_BUG][i]:
-                for line in range(line_begin, line_end + 1): # TODO check if all lines of if statement are relevant
-                    predicted_results[path].append(line)
-    return dict(predicted_results)
