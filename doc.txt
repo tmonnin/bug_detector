@@ -101,3 +101,6 @@ left (left/argument)
 right
 
 TODO statistic over #instances per expression type
+
+
+INFO:root:dict_items([('0', 11822), ('3', 11683), ('4', 5926), ('1', 3808), ('2', 299), ('5', 5434)])
