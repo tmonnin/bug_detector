@@ -3,7 +3,6 @@ import logging
 import torch
 from pathlib import Path
 import fasttext
-
 from model import Net
 import utils
 from run_bug_finding import read_json_file
@@ -37,8 +36,9 @@ def run():
     for index, json_file in enumerate(list_of_json_file_paths[0:50000]):
         if not json_file in data_dict.keys():
             logging.info(str(index) + "/" + str(len(list_of_json_file_paths)) + " - " + json_file)
-            if_ast, y = read_json_file(json_file)
-            data_dict[json_file] = utils.generate_data_dict_sequence(if_ast, token_embedding, y)
+            d = read_json_file(json_file)
+            # dict keys: if_ast, condition, code_adjacent, label
+            data_dict[json_file] = utils.generate_data_dict_sequence(d, token_embedding)
 
     if len_initial < len(data_dict):
         logging.info("Save new dict")
