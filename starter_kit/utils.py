@@ -9,6 +9,7 @@ import run_bug_finding
 import json
 import codecs
 import random
+import re
 
 #from torch_geometric.data import Data
 
@@ -72,11 +73,18 @@ def generate_data_dict_sequence(d, token_embedding):
     type_int_lst = []
     property_embedding_lst = []
     conditional_handler.bin_tree.to_sequence(type_int_lst, property_embedding_lst, token_embedding)
-    code_adjacent_emb_lst = []
-    for code_line in d["code_adjacent"]:
-        code_adjacent_emb_lst.append(token_embedding[code_line])
-    assert len(code_adjacent_emb_lst) == 10
-    data_dict = {'type_int_lst': type_int_lst, 'property_emb_lst': property_embedding_lst, 'code_adjacent_emb_lst': code_adjacent_emb_lst}
+    token_lst = []
+    for code_line in d["code_adjacent"][:5]:
+        token_lst += re.findall('[a-zA-Z]+', code_line)
+    if not len(token_lst):
+        # Add a 0 to have at least one token
+        token_lst.append("0")
+    token_embedding_lst = []
+    for token in token_lst:
+        token_emb = torch.tensor(token_embedding[token])
+        token_embedding_lst.append(token_emb)
+
+    data_dict = {'type_int_lst': type_int_lst, 'property_emb_lst': property_embedding_lst, 'code_adjacent_emb_lst': token_embedding_lst}
     if "label" in d.keys():
         data_dict['label'] = torch.tensor([d["label"]], dtype=torch.int)
 
