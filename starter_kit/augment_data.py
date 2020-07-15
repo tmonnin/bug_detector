@@ -16,45 +16,24 @@ def augment(input_dir, output_dir):
     list_of_json_file_paths = list(Path(input_dir).glob('**/*.json'))
     list_of_json_file_paths = [str(p) for p in list_of_json_file_paths]
     logging.info(str(len(list_of_json_file_paths)) + " JSON files found")
-    json_dict = defaultdict(dict)
     res_dict = defaultdict(list)
     aug_count_dict = defaultdict(lambda: 0)
-    for index, path in enumerate(list_of_json_file_paths):#[0:10000]:
+    for index, path in enumerate(list_of_json_file_paths):#[0:10000]):
         try:
             res_path = os.path.join(output_dir, os.path.basename(path))
             if not os.path.exists(res_path):
                 logging.info(path)
-                j = run_bug_finding.read_json_file(path)
-
-                code = j[utils.KEY_CODE]
-                logging.debug("Code: " + str(code))
-                ast = j[utils.KEY_AST]
-                token = j[utils.KEY_TOKENS]
-                token_range = j[utils.KEY_TOKENRANGE]
-
-                json_dict[path] = defaultdict(list)
-                code_identifier_lst = []
-                utils.dict_visitor(ast, json_dict[path], identifiers=code_identifier_lst)
-                random.shuffle(code_identifier_lst)
-                for if_ast in json_dict[path][utils.KEY_IF_AST]:
-                    condition = utils.extract(if_ast["test"]["loc"], code)
-                    #print(condition)
-                    # Skip test conditions that are too large TODO senseful?
-                    #if len(condition) > 100:
-                    #    continue
-
-                    code_adjacent = utils.extract(if_ast["test"]["loc"], code, padding=5, skip_condition=True, return_list=True)
-                    #print(code_adjacent)
-                    logging.debug("Condition: " + str(condition))
-                    funcs = [(identity, 0), (incomplete_conditional_left, 1), (incomplete_conditional_right, 1),
-                             (incorrectly_ordered_boolean, 2), (wrong_identifier, 3), (negated_condition_remove, 4),
-                             (negated_condition_add, 4), (wrong_operator, 5)]
+                if_dict_lst, code, code_identifier_lst = utils.extract_if_dicts(path)
+                funcs = [(identity, 0), (incomplete_conditional_left, 1), (incomplete_conditional_right, 1),
+                         (incorrectly_ordered_boolean, 2), (wrong_identifier, 3), (negated_condition_remove, 4),
+                         (negated_condition_add, 4), (wrong_operator, 5)]
+                for if_dict in if_dict_lst:
                     for aug_function, label in funcs:
-                        if_ast_copy = deepcopy(if_ast)
-                        is_augmented = aug_function(if_ast_copy, code, code_identifier_lst)
+                        if_dict_copy = deepcopy(if_dict)
+                        is_augmented = aug_function(if_dict_copy["if_ast"], code, code_identifier_lst)
                         if is_augmented:
-                            d = {'if_ast': if_ast_copy, 'condition': condition, 'code_adjacent': code_adjacent, 'label': label}
-                            res_dict[path].append(d)
+                            if_dict_copy["label"] = label
+                            res_dict[path].append(if_dict_copy)
                             logging.debug("Augmented: " + str(aug_function))
                             aug_count_dict[str(label)] += 1
 

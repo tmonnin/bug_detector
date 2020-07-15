@@ -10,25 +10,7 @@ import codecs
 import logging
 import utils
 
-
-
 model_path = "model"
-
-def read_json_file(json_file_path: str) -> List:
-    """ Read a JSON file given path """
-    try:
-        obj_text = codecs.open(json_file_path, 'r',
-                               encoding='utf-8').read()
-        return json.loads(obj_text)
-    except FileNotFoundError:
-        print(
-            "File {} not found. Please provide a correct file path Eg. ./results/hello.json".format(json_file_path))
-        return []
-    except Exception as e:
-        # Most likely malformed JSON file
-        print("Error loading JSON " + json_file_path)
-        return []
-
 
 def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: fasttext.FastText) -> Dict[str, List[int]]:
     r"""
@@ -77,18 +59,18 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
     for path in list_of_json_file_paths:
         try:
             logging.debug(path)
-            j = read_json_file(path)
+            if_dict_lst, code, code_identifier_lst = utils.extract_if_dicts(path)
             # print(j.keys())
             # dict_keys(['tokenList', 'raw_source_code', 'ast', 'tokenRangesList'])
 
             logging.debug("Code")
-            logging.debug(j[utils.KEY_CODE])
+            logging.debug(code)
             json_dict[path] = defaultdict(list)
-            utils.dict_visitor(j[utils.KEY_AST], json_dict[path])
 
-            for if_ast in json_dict[path][utils.KEY_IF_AST]:
-                data_dict = utils.generate_data_dict_sequence(if_ast, token_embedding)
-                is_bug = net.classify([data_dict])
+            for if_dict in if_dict_lst:
+                d = utils.generate_data_dict_sequence(if_dict, token_embedding)
+                is_bug = net.classify([d])
+                json_dict[path][utils.KEY_IF_AST] += [if_dict[utils.KEY_IF_AST]]
                 json_dict[path][utils.KEY_IS_BUG] += is_bug
 
             #utils.print_expressions(expressions)

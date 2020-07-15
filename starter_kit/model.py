@@ -107,7 +107,7 @@ class Net(nn.Module):
         return x
 
     def train(self, train_set, learning_rate, epochs, weights):
-        training_set = Dataset(train_set)
+        training_set = TrainLoader(train_set)
         assert len(training_set) == len(weights)
         weighted_sampler = torch.utils.data.WeightedRandomSampler(weights, len(weights), replacement=True)
         training_generator = torch.utils.data.DataLoader(training_set, **self.params, collate_fn=training_set.pad_collate, sampler=weighted_sampler) # torch_geometric.data.DataLoader(training_set, **self.params)
@@ -146,10 +146,10 @@ class Net(nn.Module):
             torch.save(self.state_dict(), "model")
 
     def classify(self, data_set):
-        classify_set = Dataset(data_set)
+        classify_set = ClassifyLoader(data_set)
         test_generator = torch.utils.data.DataLoader(classify_set, **self.params, collate_fn=classify_set.pad_collate) # torch_geometric.data.DataLoader(test_set, **self.params)
         is_bug = []
-        for batch_idx, (type_batch_pad, property_batch_pad, target_batch, pad_lens) in enumerate(test_generator):
+        for batch_idx, (type_batch_pad, property_batch_pad, pad_lens) in enumerate(test_generator):
             net_out = self(type_batch_pad, property_batch_pad, pad_lens)
             pred = net_out.to(torch.float32).squeeze(1)
             pred = (pred >= 0.5).tolist()
@@ -157,7 +157,7 @@ class Net(nn.Module):
         return is_bug
 
     def test(self, test_set):
-        test_set = Dataset(test_set)
+        test_set = TrainLoader(test_set)
         test_generator = torch.utils.data.DataLoader(test_set, **self.params, collate_fn=test_set.pad_collate) # torch_geometric.data.DataLoader(test_set, **self.params)
         # run a test loop
         test_loss = 0
@@ -176,7 +176,7 @@ class Net(nn.Module):
             100. * correct / len(test_generator.dataset)))
 
 
-class Dataset(torch.utils.data.Dataset):# torch_geometric.data.Dataset):
+class TrainLoader(torch.utils.data.Dataset):# torch_geometric.data.Dataset):
 
     def __init__(self, data_lst):
         self.data_lst = data_lst
@@ -191,10 +191,7 @@ class Dataset(torch.utils.data.Dataset):# torch_geometric.data.Dataset):
         property_emb_lst = data_dict['property_emb_lst']
         property_tensor = torch.stack(property_emb_lst) #torch.Tensor(property_emb_lst)
         #data = list(zip(type_int_lst, property_emb_lst))
-        if 'label' in data_dict.keys():
-            target = data_dict['label']
-        else:
-            target = None
+        target = data_dict['label']
         return type_tensor, property_tensor, target
 
     def pad_collate(self, batch):
@@ -205,3 +202,23 @@ class Dataset(torch.utils.data.Dataset):# torch_geometric.data.Dataset):
         property_batch_pad = pad_sequence(property_batch, batch_first=True, padding_value=0)
 
         return type_batch_pad, property_batch_pad, torch.tensor(target_batch), pad_lens
+
+
+class ClassifyLoader(TrainLoader):
+
+    def __getitem__(self, index):
+        data_dict = self.data_lst[index]
+        type_int_lst = data_dict['type_int_lst']
+        type_tensor = torch.stack(type_int_lst)
+        property_emb_lst = data_dict['property_emb_lst']
+        property_tensor = torch.stack(property_emb_lst) #torch.Tensor(property_emb_lst)
+        return type_tensor, property_tensor
+
+    def pad_collate(self, batch):
+        (type_batch, property_batch) = zip(*batch)
+        pad_lens = torch.tensor([len(type) for type in type_batch])
+
+        type_batch_pad = pad_sequence(type_batch, batch_first=True, padding_value=0)
+        property_batch_pad = pad_sequence(property_batch, batch_first=True, padding_value=0)
+
+        return type_batch_pad, property_batch_pad, pad_lens

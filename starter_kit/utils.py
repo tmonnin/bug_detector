@@ -2,6 +2,14 @@ import os
 import torch
 import numpy as np
 from collections import defaultdict
+from typing import List, Dict
+import argparse
+from pathlib import Path
+import run_bug_finding
+import json
+import codecs
+import random
+
 #from torch_geometric.data import Data
 
 from model import Net
@@ -22,6 +30,41 @@ class ConditionalHandler:
         self.code = code
         self.condition = condition # extract(if_ast["test"]["loc"], code)
         self.bin_tree = BinTree(if_ast["test"])
+
+def read_json_file(json_file_path: str) -> List:
+    """ Read a JSON file given path """
+    try:
+        obj_text = codecs.open(json_file_path, 'r',
+                               encoding='utf-8').read()
+        return json.loads(obj_text)
+    except FileNotFoundError:
+        print(
+            "File {} not found. Please provide a correct file path Eg. ./results/hello.json".format(json_file_path))
+        return []
+    except Exception as e:
+        # Most likely malformed JSON file
+        print("Error loading JSON " + json_file_path)
+        return []
+
+def extract_if_dicts(path):
+    j = read_json_file(path)
+    code = j[KEY_CODE]
+    ast = j[KEY_AST]
+    token = j[KEY_TOKENS]
+    token_range = j[KEY_TOKENRANGE]
+
+    json_dict = defaultdict(list)
+    code_identifier_lst = []
+    dict_visitor(ast, json_dict, identifiers=code_identifier_lst)
+    random.shuffle(code_identifier_lst)
+    if_dict_lst = []
+    for if_ast in json_dict[KEY_IF_AST]:
+        condition = extract(if_ast["test"]["loc"], code)
+        code_adjacent = extract(if_ast["test"]["loc"], code, padding=5, skip_condition=True, return_list=True)
+        d = {'if_ast': if_ast, 'condition': condition, 'code_adjacent': code_adjacent}
+        if_dict_lst.append(d)
+
+    return if_dict_lst, code, code_identifier_lst
 
 def generate_data_dict_sequence(d, token_embedding):
     #d = {'if_ast': d[0], 'label': d[1]}

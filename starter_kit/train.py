@@ -6,7 +6,6 @@ from pathlib import Path
 import fasttext
 from model import Net
 import utils
-from run_bug_finding import read_json_file
 
 
 
@@ -34,10 +33,10 @@ def run():
     list_of_json_file_paths = list(Path(data_path).glob('**/*.json'))
     list_of_json_file_paths = [str(p) for p in list_of_json_file_paths]
     len_initial = len(data_dict)
-    for index, json_file in enumerate(list_of_json_file_paths[0:1000]):
+    for index, json_file in enumerate(list_of_json_file_paths):
         if not json_file in data_dict.keys():
             logging.info(str(index) + "/" + str(len(list_of_json_file_paths)) + " - " + json_file)
-            d_lst = read_json_file(json_file)
+            d_lst = utils.read_json_file(json_file)
             for d in d_lst:
                 # dict keys: if_ast, condition, code_adjacent, label
                 data_dict[json_file].append(utils.generate_data_dict_sequence(d, token_embedding))
@@ -52,7 +51,7 @@ def run():
         data_lst += data_file_lst
     del data_dict # Free resources to improve debugging performance
 
-    data_lst = data_lst[:3000]
+    data_lst = data_lst[:120000]
     print("Training data length: ", str(len(data_lst)))
     labels = []
     [labels.append(data["label"]) for data in data_lst]
