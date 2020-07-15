@@ -108,7 +108,8 @@ class Net(nn.Module):
 
     def train(self, train_set, learning_rate, epochs, weights):
         training_set = Dataset(train_set)
-        weighted_sampler = torch.utils.data.WeightedRandomSampler(weights, len(training_set), replacement=True)
+        assert len(training_set) == len(weights)
+        weighted_sampler = torch.utils.data.WeightedRandomSampler(weights, len(weights), replacement=True)
         training_generator = torch.utils.data.DataLoader(training_set, **self.params, collate_fn=training_set.pad_collate, sampler=weighted_sampler) # torch_geometric.data.DataLoader(training_set, **self.params)
 
         # create a stochastic gradient descent optimizer
