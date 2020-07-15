@@ -1,9 +1,21 @@
 import os
 import torch
-
+import numpy as np
+from collections import defaultdict
 #from torch_geometric.data import Data
 
 from model import Net
+
+### Pre-defined
+KEY_CODE = 'raw_source_code'
+KEY_AST = 'ast'
+KEY_TOKENS = 'tokenList'
+KEY_TOKENRANGE = 'tokenRangesList'
+
+### Self-defined
+KEY_START_LINE = 'start_line'
+KEY_IF_AST = 'if_ast'
+KEY_IS_BUG = 'is_bug'
 
 class ConditionalHandler:
     def __init__(self, code, condition, if_ast):
@@ -11,17 +23,19 @@ class ConditionalHandler:
         self.condition = condition # extract(if_ast["test"]["loc"], code)
         self.bin_tree = BinTree(if_ast["test"])
 
-def generate_data_dict_sequence(if_ast, token_embedding, y=None):
-    conditional_handler = ConditionalHandler(None, None, if_ast)
+def generate_data_dict_sequence(d, token_embedding):
+    #d = {'if_ast': d[0], 'label': d[1]}
+    conditional_handler = ConditionalHandler(None, None, d["if_ast"])
     type_int_lst = []
     property_embedding_lst = []
     conditional_handler.bin_tree.to_sequence(type_int_lst, property_embedding_lst, token_embedding)
-
-    data_dict = {'type_int_lst': type_int_lst, 'property_emb_lst': property_embedding_lst}
-    label = -1
-    if y is not None:
-        label = torch.tensor([y], dtype=torch.float32)
-    data_dict['label'] = label
+    code_adjacent_emb_lst = []
+    for code_line in d["code_adjacent"]:
+        code_adjacent_emb_lst.append(token_embedding[code_line])
+    assert len(code_adjacent_emb_lst) == 10
+    data_dict = {'type_int_lst': type_int_lst, 'property_emb_lst': property_embedding_lst, 'code_adjacent_emb_lst': code_adjacent_emb_lst}
+    if "label" in d.keys():
+        data_dict['label'] = torch.tensor([d["label"]], dtype=torch.int)
 
     return data_dict
 
@@ -193,15 +207,101 @@ def load_model(model_path):
         net.load_state_dict(state_dict)
     return net
 
-def extract(loc_dict, code):
+def extract(loc_dict, code, padding=0, skip_condition=False, return_list=False):
     start_l = loc_dict["start"]["line"]
     start_c = loc_dict["start"]["column"]
     end_l = loc_dict["end"]["line"]
     end_c = loc_dict["end"]["column"]
-    lines = code.splitlines()[start_l-1:end_l]
-    lines[-1] = lines[-1][:end_c]
-    lines[0] = lines[0][start_c:]
-    res = lines[0]
-    for l in lines[1:]:
-        res += " " + l
+    if not skip_condition:
+        lines = code.splitlines()[max(start_l-1-padding,0):end_l+padding]
+    else:
+        lines = [""] * (padding * 2)
+        lines_above = code.splitlines()[max(start_l-1-padding,0):start_l-1]
+        for i, line_above in enumerate(lines_above[::-1]):
+            lines[padding - 1 - i] = line_above
+        lines_below = code.splitlines()[end_l:end_l+padding]
+        for i, line_below in enumerate(lines_below):
+            lines[padding + i] = line_below
+
+    if padding == 0:
+        lines[-1] = lines[-1][:end_c]
+        lines[0] = lines[0][start_c:]
+    if not return_list:
+        res = lines[0]
+        for l in lines[1:]:
+            res += " " + l
+    else:
+        res = lines
     return res
+
+def dict_visitor(value, json_dict=None, expressions=None, identifiers=None):
+
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if isinstance(v, dict):
+                dict_visitor(v, json_dict, expressions, identifiers)
+            elif isinstance(v, list):
+                for i in v:
+                    dict_visitor(i, json_dict, expressions, identifiers)
+            elif k == "type":
+                if v == "IfStatement" and json_dict is not None: # TODO change to constants
+                    # Found an IfStatement
+                    json_dict[KEY_IF_AST].append(value)
+                    json_dict[KEY_START_LINE].append(value["loc"]["start"]["line"])
+                    # json_dict[KEY_START_LINE].append([value["loc"]["start"]["line"], value["loc"]["end"]["line"]])
+                    if expressions is not None:
+                        condition = value["test"]
+                        type = condition["type"]
+                        if type in expressions.keys():
+                            expressions[type].update(list(condition.keys()))
+                        else:
+                            expressions[type] = set(list(condition.keys()))
+                elif v == "Identifier" and "name" in value.keys(): # TODO change to constants
+                    if identifiers is not None:
+                        identifiers.append(value)
+
+    elif isinstance(value, list):
+        for i in value:
+            dict_visitor(i, json_dict, expressions, identifiers)
+
+def print_json(j):
+    print("AST", j[KEY_AST])
+    print("Source", j[KEY_CODE])
+    print("TokenList", j[KEY_TOKENS])
+    print("TokenRange", j[KEY_TOKENRANGE])
+
+def count_unique(list):
+    values, counts = np.unique(list, return_counts=True)
+    print(values)
+    print(counts)
+
+def print_expressions(expressions):
+    for k, v in expressions.items():
+        print(k, v)
+    # UnaryExpression
+    # {'range', 'prefix', 'operator', 'type', 'argument', 'loc'}
+    # BinaryExpression
+    # {'range', 'right', 'operator', 'type', 'loc', 'left'}
+    # CallExpression
+    # {'callee', 'type', 'range', 'loc', 'arguments'}
+    # MemberExpression
+    # {'computed', 'property', 'range', 'type', 'loc', 'object'}
+    # Literal
+    # {'raw', 'value', 'range', 'loc', 'type'}
+    # AssignmentExpression
+    # {'range', 'right', 'operator', 'type', 'loc', 'left'}
+    # LogicalExpression
+    # {'range', 'right', 'operator', 'type', 'loc', 'left'}
+    # Identifier
+    # {'name', 'type', 'range', 'loc'}
+
+def create_result(json_dict):
+    predicted_results = defaultdict(list)
+    for path, d in json_dict.items():
+        for i in range(len(d[KEY_IS_BUG])):
+            line_begin = d[KEY_IF_AST][i]['test']['loc']['start']['line']
+            line_end = d[KEY_IF_AST][i]['test']['loc']['end']['line']
+            if d[KEY_IS_BUG][i]:
+                for line in range(line_begin, line_end + 1): # TODO check if all lines of if statement are relevant
+                    predicted_results[path].append(line)
+    return dict(predicted_results)
