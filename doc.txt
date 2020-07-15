@@ -104,3 +104,7 @@ TODO statistic over #instances per expression type
 
 
 INFO:root:dict_items([('0', 11822), ('3', 11683), ('4', 5926), ('1', 3808), ('2', 299), ('5', 5434)])
+
+INFO:root:1673/9999
+INFO:root:..\..\json_files\25153_4060_a_angular-locale_es-ea.json
+INFO:root:dict_items([('0', 29722), ('3', 29427), ('4', 13948), ('5', 14441), ('1', 10826), ('2', 763)])
