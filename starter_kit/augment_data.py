@@ -1,5 +1,6 @@
 import run_bug_finding
 import logging
+import random
 from pathlib import Path
 import sys
 from collections import defaultdict
@@ -8,7 +9,7 @@ import json
 import os
 import utils
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 def augment(input_dir, output_dir):
@@ -25,37 +26,42 @@ def augment(input_dir, output_dir):
                 logging.info(path)
                 j = run_bug_finding.read_json_file(path)
 
-                code = j[run_bug_finding.KEY_CODE]
+                code = j[utils.KEY_CODE]
                 logging.debug("Code: " + str(code))
-                ast = j[run_bug_finding.KEY_AST]
-                token = j[run_bug_finding.KEY_TOKENS]
-                token_range = j[run_bug_finding.KEY_TOKENRANGE]
+                ast = j[utils.KEY_AST]
+                token = j[utils.KEY_TOKENS]
+                token_range = j[utils.KEY_TOKENRANGE]
 
                 json_dict[path] = defaultdict(list)
-                run_bug_finding.dict_visitor_(ast, json_dict[path])
-                # TODO skip test conditions that are too large
-                for if_ast in json_dict[path][run_bug_finding.KEY_IF_AST]:
+                code_identifier_lst = []
+                utils.dict_visitor(ast, json_dict[path], identifiers=code_identifier_lst)
+                random.shuffle(code_identifier_lst)
+                for if_ast in json_dict[path][utils.KEY_IF_AST]:
                     condition = utils.extract(if_ast["test"]["loc"], code)
+                    #print(condition)
+                    # Skip test conditions that are too large TODO senseful?
+                    if len(condition) > 100:
+                        continue
+
+                    code_adjacent = utils.extract(if_ast["test"]["loc"], code, padding=5, skip_condition=True, return_list=True)
+                    #print(code_adjacent)
                     logging.debug("Condition: " + str(condition))
-                    one_augmented = False
-                    for aug_function in [incomplete_conditional, incorrectly_ordered_boolean, wrong_identifier, negated_condition, wrong_operator]:
+                    funcs = [(identity, 0), (incomplete_conditional_left, 1), (incomplete_conditional_right, 1),
+                             (incorrectly_ordered_boolean, 2), (wrong_identifier, 3), (negated_condition_remove, 4),
+                             (negated_condition_add, 4), (wrong_operator, 5)]
+                    for aug_function, label in funcs:
                         if_ast_copy = deepcopy(if_ast)
-                        is_augmented = aug_function(if_ast_copy, code)
+                        is_augmented = aug_function(if_ast_copy, code, code_identifier_lst)
                         if is_augmented:
-                            res_dict[path].append([if_ast_copy, 1])
+                            d = {'if_ast': if_ast_copy, 'condition': condition, 'code_adjacent': code_adjacent, 'label': label}
+                            res_dict[path].append(d)
                             logging.debug("Augmented: " + str(aug_function))
-                            aug_count_dict[aug_function] += 1
-                            one_augmented = True
-                        #bin_tree = utils.ConditionalHandler(code, condition, if_ast_copy)
-                        #logging.debug(bin_tree)
-                    if not one_augmented:
-                        res_dict[path].append([if_ast, 0])
-                        aug_count_dict["None"] += 1
+                            aug_count_dict[str(label)] += 1
 
                 for i, res in enumerate(res_dict[path]):
                     output_path = res_path[0] + "_" + str(i) + res_path[1]
                     with open(output_path, 'w') as out_file:
-                        pass#json.dump(res_dict[path][i], out_file)
+                        json.dump(res_dict[path][i], out_file)
 
         except Exception as e:
             logging.error("Exception in file " + path)
@@ -65,15 +71,20 @@ def augment(input_dir, output_dir):
         logging.info(aug_count_dict.items())
         logging.info(str(index) + "/" + str(len(list_of_json_file_paths)))
 
-def incomplete_conditional(if_ast: dict, code):
+def identity(if_ast: dict, code, code_identifier_lst):
+    return True
+
+def incomplete_conditional_left(if_ast: dict, code, code_identifier_lst):
     if if_ast["test"]["type"] == "LogicalExpression":
         if_ast["test"] = if_ast["test"]["left"]
-        #if_ast["test"] = if_ast["test"]["right"]
-        # TODO consider alternatives
         return True
 
+def incomplete_conditional_right(if_ast: dict, code, code_identifier_lst):
+    if if_ast["test"]["type"] == "LogicalExpression":
+        if_ast["test"] = if_ast["test"]["right"]
+        return True
 
-def incorrectly_ordered_boolean(if_ast: dict, code):
+def incorrectly_ordered_boolean(if_ast: dict, code, code_identifier_lst):
     if if_ast["test"]["type"] == "LogicalExpression" and if_ast["test"]["operator"] == "&&":
         code_left = utils.extract(if_ast["test"]["left"]["loc"], code)
         code_right = utils.extract(if_ast["test"]["right"]["loc"], code)
@@ -83,28 +94,42 @@ def incorrectly_ordered_boolean(if_ast: dict, code):
             if_ast["test"]["right"] = tmp
             return True
 
+def wrong_identifier(if_ast: dict, code, code_identifier_lst):
+    code_condition_padded = utils.extract(if_ast["test"]["loc"], code, padding=5)
+    condition_identifier_lst = []
+    utils.dict_visitor(if_ast, identifiers=condition_identifier_lst)
+    if len(condition_identifier_lst):
+        identifier_to_augment = random.choice(condition_identifier_lst)
+        # TODO identifier must stand alone?
+        for identifier in code_identifier_lst:
+            identifier_start = identifier["loc"]["start"]["line"]
+            augment_start = identifier_to_augment["loc"]["start"]["line"]
+            if identifier_start < (augment_start - 5) and identifier["name"] not in code_condition_padded:
+                # TODO choose most similar identifier
+                # TODO near neighborhood could be feasible
+                identifier_to_augment["name"] = identifier["name"]
+                return True
 
-def wrong_identifier(if_ast: dict, code):
-    return None
-
-
-def negated_condition(if_ast: dict, code):
+def negated_condition_remove(if_ast: dict, code, code_identifier_lst):
     if if_ast["test"]["type"] == "UnaryExpression" and if_ast["test"]["operator"] == "!":
         # Remove negation operator
         if_ast["test"] = if_ast["test"]["argument"]
         return True
-    # else:
-    #     # Pack test into negation
-    #     arg = if_ast["test"]
-    #     if_ast["test"] = {
-    #         "type": "UnaryExpression",
-    #         "operator": "!",
-    #         "prefix": True,
-    #         "argument": arg
-    #     }
 
+def negated_condition_add(if_ast: dict, code, code_identifier_lst):
+    # Choose types where a negated condition can easily be added without thinking about brackets
+    if if_ast["test"]["type"] in ("MemberExpression", "Identifier", "CallExpression"):
+        arg = if_ast["test"]
+        # Add negation operator
+        if_ast["test"] = {
+            "type": "UnaryExpression",
+            "operator": "!",
+            "prefix": True,
+            "argument": arg
+        }
+        return True
 
-def wrong_operator(if_ast: dict, code):
+def wrong_operator_(if_ast: dict, code, code_identifier_lst):
     if if_ast["test"]["type"] == "BinaryExpression":
         if if_ast["test"]["operator"] == "<":
             if_ast["test"]["operator"] = ">"
@@ -113,6 +138,41 @@ def wrong_operator(if_ast: dict, code):
             if_ast["test"]["operator"] = "<"
             return True
         # TODO equals, shift operator
+
+def wrong_operator(if_ast: dict, code, code_identifier_lst):
+    if if_ast["test"]["type"] == "BinaryExpression":
+        if if_ast["test"]["operator"] == "<=":
+            if_ast["test"]["operator"] = "<"
+            return True
+        elif if_ast["test"]["operator"] == ">=":
+            if_ast["test"]["operator"] = ">"
+            return True
+        elif if_ast["test"]["operator"] == "<":
+            if_ast["test"]["operator"] = "<="
+            return True
+        elif if_ast["test"]["operator"] == ">":
+            if_ast["test"]["operator"] = ">="
+            return True
+        elif if_ast["test"]["operator"] == "===":
+            if_ast["test"]["operator"] = "=="
+            return True
+        elif if_ast["test"]["operator"] == "==":
+            if_ast["test"]["operator"] = "="
+            if_ast["test"]["type"] = "AssignmentExpression"
+            return True
+        elif if_ast["test"]["operator"] == "!==":
+            if_ast["test"]["operator"] = "!="
+            if_ast["test"]["type"] = "AssignmentExpression"
+            return True
+    elif if_ast["test"]["type"] == "LogicalExpression":
+        if if_ast["test"]["operator"] == "&&":
+            if_ast["test"]["operator"] = "&"
+            if_ast["test"]["type"] = "BinaryExpression"
+            return True
+        if if_ast["test"]["operator"] == "||":
+            if_ast["test"]["operator"] = "|"
+            if_ast["test"]["type"] = "BinaryExpression"
+            return True
 
 def run() -> None:
     if len(sys.argv) != 3:
