@@ -16,7 +16,7 @@ class Net(nn.Module):
         # TODO check if necessary
         # 4 special characters: < pad >, EOS, < unk >, N
         # https://suzyahyah.github.io/pytorch/2019/07/01/DataLoader-Pad-Pack-Sequence.html
-        self.embedding = nn.Embedding(num_features+4, 50)
+        self.embedding = nn.Embedding(num_features, 50)
         strategy = "lstm"
         if strategy == "graph_conv":
             self.conv1 = GCNConv(num_features, 128, cached=True, normalize=False)
