@@ -1,16 +1,11 @@
-from typing import List, Dict, Union, DefaultDict
-from pathlib import Path
-import torch  # -> version --> 1.5.0
-import numpy as np
+from typing import List, Dict
 import os
 import fasttext
 from collections import defaultdict
-import json
-import codecs
 import logging
 import utils
+import train
 
-model_path = "model"
 
 def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: fasttext.FastText) -> Dict[str, List[int]]:
     r"""
@@ -47,15 +42,13 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
     #####################################################
 
     json_dict = defaultdict(dict)
-    expressions = {}
     log_level = logging.INFO
     logging.basicConfig(level=log_level)
     cur_dir_path = os.path.dirname(os.path.realpath(__file__))
-    model_path_full = os.path.join(cur_dir_path, model_path)
-    net = utils.load_model(model_path_full)
+    model_path_full = os.path.join(cur_dir_path, train.model_path)
+    net = utils.load_model(model_path_full, train.strategy)
 
-    #if log_level == logging.DEBUG:
-    list_of_json_file_paths = list_of_json_file_paths#[0:50]
+    list_of_json_file_paths = list_of_json_file_paths[0:50]
     for path in list_of_json_file_paths:
         try:
             logging.debug(path)
@@ -68,12 +61,14 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
             json_dict[path] = defaultdict(list)
 
             for if_dict in if_dict_lst:
-                d = utils.generate_data_dict_sequence(if_dict, token_embedding)
+                if train.strategy == 'lstm':
+                    d = utils.generate_data_dict_sequence(if_dict, token_embedding)
+                elif train.strategy == 'gcn':
+                    d = utils.generate_data_dict_graph(if_dict, token_embedding)
                 is_bug = net.classify([d])
                 json_dict[path][utils.KEY_IF_AST] += [if_dict[utils.KEY_IF_AST]]
                 json_dict[path][utils.KEY_IS_BUG] += is_bug
 
-            #utils.print_expressions(expressions)
             logging.debug(json_dict[path][utils.KEY_START_LINE])
 
         except Exception as e:
