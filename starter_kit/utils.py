@@ -2,18 +2,14 @@ import os
 import torch
 import numpy as np
 from collections import defaultdict
-from typing import List, Dict
-import argparse
-from pathlib import Path
-import run_bug_finding
+from typing import List
 import json
 import codecs
 import random
 import re
 
-#from torch_geometric.data import Data
-
-from model import Net
+from model import LSTMNet
+from model_gcn import GCNNet
 
 ### Pre-defined
 KEY_CODE = 'raw_source_code'
@@ -71,8 +67,8 @@ def generate_data_dict_sequence(d, token_embedding):
     #d = {'if_ast': d[0], 'label': d[1]}
     conditional_handler = ConditionalHandler(None, None, d["if_ast"])
     type_int_lst = []
-    property_embedding_lst = []
-    conditional_handler.bin_tree.to_sequence(type_int_lst, property_embedding_lst, token_embedding)
+    property_emb_lst = []
+    conditional_handler.bin_tree.to_sequence(type_int_lst, property_emb_lst, token_embedding)
     token_lst = []
     for code_line in d["code_adjacent"][:5]:
         token_lst += re.findall('[a-zA-Z]+', code_line)
@@ -84,7 +80,7 @@ def generate_data_dict_sequence(d, token_embedding):
         token_emb = torch.tensor(token_embedding[token])
         token_embedding_lst.append(token_emb)
 
-    data_dict = {'type_int_lst': type_int_lst, 'property_emb_lst': property_embedding_lst, 'code_adjacent_emb_lst': token_embedding_lst}
+    data_dict = {'type_int_lst': type_int_lst, 'property_emb_lst': property_emb_lst, 'code_adjacent_emb_lst': token_embedding_lst}
     if "label" in d.keys():
         data_dict['label'] = torch.tensor([d["label"]], dtype=torch.int)
 
@@ -94,29 +90,31 @@ def generate_data_dict_flattened(if_ast, token_embedding, y=None):
     conditional_handler = ConditionalHandler(None, None, if_ast)
     x_lst = []
     edge_lst = []
-    # conditional_handler.bin_tree.to_list(x_lst, edge_lst, token_embedding)
     conditional_handler.bin_tree.to_flattened(x_lst, edge_lst, token_embedding, depth=4)
     type_oh = torch.zeros([15], dtype=torch.int64)  # [b, c, h, w]
     property_ft = torch.zeros((100, 1, 15), dtype=torch.float)  # [b, c, h, w]
 
     for i in range(len(x_lst)):
         type_oh[i] = x_lst[i][0]
-        # type_oh[:,0,i] = x_lst[i][0]
         property_ft[:, 0, i] = x_lst[i][1]
 
-    # x = torch.tensor(x_lst, dtype=torch.float)
-    edge_index = None  # torch.tensor(edge_lst, dtype=torch.long)
-
-    # if len(x) < 5:
-    #    continue
-    # x=x.unsqueeze(0).unsqueeze(0)
-    data = None #Data(x=type_oh, edge_index=edge_index)
-    data_dict = {'type_oh': type_oh, 'property_ft': property_ft, 'data': data}
+    data_dict = {'type_oh': type_oh, 'property_ft': property_ft}
     label = -1
     if y is not None:
         label = torch.tensor([y], dtype=torch.float32)
     data_dict['label'] = label
 
+    return data_dict
+
+def generate_data_dict_graph(d, token_embedding):
+    conditional_handler = ConditionalHandler(None, None, d['if_ast'])
+    type_int_lst = []
+    property_emb_lst = []
+    edge_lst = []
+    conditional_handler.bin_tree.to_graph(type_int_lst, property_emb_lst, edge_lst, token_embedding)
+    data_dict = {'type_int_lst': type_int_lst, 'property_emb_lst': property_emb_lst, 'edge_lst': edge_lst}
+    if "label" in d.keys():
+        data_dict['label'] = torch.tensor([d["label"]], dtype=torch.int)
     return data_dict
 
 
@@ -200,60 +198,57 @@ class BinTree:
         #    print(ast["type"])
         #    print("MISSED")
 
-    def to_list(self, x_lst, edge_lst, token_embedding):
-        idx = len(x_lst)
-        #X = token_embedding[self.type]
-        target = self.type
-        X = torch.zeros(1, 13)
-        X[range(X.shape[0]), target] = 1
-        x_lst.append(X)
+    def to_graph(self, type_int_lst, property_emb_lst, edge_lst, token_embedding):
+        idx = len(type_int_lst)
+        property_emb = torch.tensor(token_embedding[str(self.property)])
+        type_int_lst.append(torch.tensor(self.type))
+        property_emb_lst.append(property_emb)
         if self.left is not None:
-            idx_left = self.left.to_list(x_lst, edge_lst, token_embedding)
+            idx_left = self.left.to_graph(type_int_lst, property_emb_lst, edge_lst, token_embedding)
             edge_lst.append([idx, idx_left])
             edge_lst.append([idx_left, idx])
         if self.right is not None:
-            idx_right = self.right.to_list(x_lst, edge_lst, token_embedding)
+            idx_right = self.right.to_graph(type_int_lst, property_emb_lst, edge_lst, token_embedding)
             edge_lst.append([idx, idx_right])
             edge_lst.append([idx_right, idx])
+        if idx == 0 and not len(edge_lst):
+            edge_lst.append([0, 0]) # if test condition is only
+            edge_lst.append([0, 0]) # if test condition is only
         return idx
 
-    def to_sequence(self, type_int_lst, property_embedding_lst, token_embedding):
-        property_embedding = torch.tensor(token_embedding[str(self.property)])
+    def to_sequence(self, type_int_lst, property_emb_lst, token_embedding):
+        property_emb = torch.tensor(token_embedding[str(self.property)])
         if self.left is not None:
-            self.left.to_sequence(type_int_lst, property_embedding_lst, token_embedding)
+            self.left.to_sequence(type_int_lst, property_emb_lst, token_embedding)
         type_int_lst.append(torch.tensor(self.type))
-        property_embedding_lst.append(property_embedding)
+        property_emb_lst.append(property_emb)
         if self.right is not None:
-            self.right.to_sequence(type_int_lst, property_embedding_lst, token_embedding)
+            self.right.to_sequence(type_int_lst, property_emb_lst, token_embedding)
 
-    def to_flattened(self, x_lst, edge_lst, token_embedding, depth):
+    def to_flattened(self, x_lst, token_embedding, depth):
         if depth == 0:
             return None
-        idx = len(x_lst)
         property_ft = torch.tensor(token_embedding[str(self.property)])
-        target = self.type
 
         if self.left is not None:
-            idx_left = self.left.to_flattened(x_lst, edge_lst, token_embedding, depth-1)
-            edge_lst.append([idx, idx_left])
-            edge_lst.append([idx_left, idx])
+            self.left.to_flattened(x_lst, token_embedding, depth-1)
         else:
             for i in range(2**(depth-1)-1):
                 x_lst.append([0, torch.zeros(1,100)])
-        #type_oh = torch.zeros(13, dtype=torch.int)
-        #type_oh[range(type_oh.shape[0]), target] = 1
         x_lst.append([self.type, property_ft])
         if self.right is not None:
-            idx_right = self.right.to_flattened(x_lst, edge_lst, token_embedding, depth-1)
-            edge_lst.append([idx, idx_right])
-            edge_lst.append([idx_right, idx])
+            self.right.to_flattened(x_lst, token_embedding, depth-1)
         else:
             for i in range(2**(depth-1)-1):
                 x_lst.append([0, torch.zeros(1,100)])
-        return idx
 
-def load_model(model_path):
-    net = Net()
+def load_model(model_path, strategy='lstm'):
+    if strategy == 'lstm':
+        net = LSTMNet()
+    elif strategy == 'gcn':
+        net = GCNNet()
+    else:
+        raise Exception("Strategy not supported")
     if os.path.exists(model_path):
         state_dict = torch.load(model_path)
         net.load_state_dict(state_dict)
