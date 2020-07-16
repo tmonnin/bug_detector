@@ -26,7 +26,7 @@ def augment(input_dir, output_dir):
                 if_dict_lst, code, code_identifier_lst = utils.extract_if_dicts(path)
                 funcs = [(identity, 0), (incomplete_conditional_left, 1), (incomplete_conditional_right, 1),
                          (incorrectly_ordered_boolean, 2), (wrong_identifier, 3), (negated_condition_remove, 4),
-                         (negated_condition_add, 4), (wrong_operator, 5)]
+                         (negated_condition_add, 4), (wrong_operator_similar, 5), (wrong_operator_inverse, 5)]
                 for if_dict in if_dict_lst:
                     for aug_function, label in funcs:
                         if_dict_copy = deepcopy(if_dict)
@@ -107,7 +107,7 @@ def negated_condition_add(if_ast: dict, code, code_identifier_lst):
         }
         return True
 
-def wrong_operator_(if_ast: dict, code, code_identifier_lst):
+def wrong_operator_inverse(if_ast: dict, code, code_identifier_lst):
     if if_ast["test"]["type"] == "BinaryExpression":
         if if_ast["test"]["operator"] == "<":
             if_ast["test"]["operator"] = ">"
@@ -115,9 +115,14 @@ def wrong_operator_(if_ast: dict, code, code_identifier_lst):
         elif if_ast["test"]["operator"] == ">":
             if_ast["test"]["operator"] = "<"
             return True
-        # TODO equals, shift operator
+        elif if_ast["test"]["operator"] == ">=":
+            if_ast["test"]["operator"] = "<="
+            return True
+        elif if_ast["test"]["operator"] == "<=":
+            if_ast["test"]["operator"] = ">="
+            return True
 
-def wrong_operator(if_ast: dict, code, code_identifier_lst):
+def wrong_operator_similar(if_ast: dict, code, code_identifier_lst):
     if if_ast["test"]["type"] == "BinaryExpression":
         if if_ast["test"]["operator"] == "<=":
             if_ast["test"]["operator"] = "<"
@@ -147,7 +152,7 @@ def wrong_operator(if_ast: dict, code, code_identifier_lst):
             if_ast["test"]["operator"] = "&"
             if_ast["test"]["type"] = "BinaryExpression"
             return True
-        if if_ast["test"]["operator"] == "||":
+        elif if_ast["test"]["operator"] == "||":
             if_ast["test"]["operator"] = "|"
             if_ast["test"]["type"] = "BinaryExpression"
             return True
