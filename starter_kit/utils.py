@@ -8,7 +8,7 @@ import codecs
 import random
 import re
 
-from model import LSTMNet
+from model_lstm import LSTMNet
 from model_gcn import GCNNet
 
 ### Pre-defined
