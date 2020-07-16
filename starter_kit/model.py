@@ -36,7 +36,7 @@ class Net(nn.Module):
 
         elif strategy == "lstm":
             self.lstm_condition = nn.LSTM(150, 256, num_layers=1, bidirectional=False, batch_first=True) # TODO potentially increase e.g. 512
-            #self.lstm_context = nn.LSTM(150, 128, num_layers=1, bidirectional=False, batch_first=True) # TODO potentially increase e.g. 512
+            self.lstm_context = nn.LSTM(100, 128, num_layers=1, bidirectional=False, batch_first=True) # TODO potentially increase e.g. 512
             # TODO padding
             # 5 prev and post lines
             # Fancy: attention
@@ -45,8 +45,9 @@ class Net(nn.Module):
             # Output: 10x lstm_context, 1x lstm_condition
             # Concat, linear, auf 128
 
-        self.lin1 = nn.Linear(256, 128)
-        self.lin2 = nn.Linear(128, num_classes)
+        self.lin_condition = nn.Linear(256, 128)
+        self.lin_context = nn.Linear(128, 64)
+        self.lin = nn.Linear(192, num_classes)
 
         self.criterion = nn.BCELoss()
 
@@ -54,55 +55,71 @@ class Net(nn.Module):
                        'shuffle': False,
                        'num_workers': 0}
 
-    def forward(self, type_batch_pad, property_batch_pad, pad_lens):
+    def forward(self, type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens):
         #outputs, outputs_len = torch.nn.utils.rnn.pad_packed_sequence(type_pack, batch_first=True)
 
         strategy = "lstm"
         #for type_len, type_pad in zip(type_lens, type_batch_pad):
         type_embedded = self.embedding(torch.tensor(type_batch_pad).to(torch.int64))
-        x = torch.cat([type_embedded, property_batch_pad], dim=2) # B,S,C
+        x_condition = torch.cat([type_embedded, property_batch_pad], dim=2) # B,S,C
 
         if strategy == "conv":
             type_embedded = torch.transpose(type_embedded, 1, 2)
             type_embedded = type_embedded.unsqueeze(2)
 
-            x = torch.cat((type_embedded, property_embedded), dim=1)
+            x_condition = torch.cat((type_embedded, property_embedded), dim=1)
 
-            x = F.relu(self.conv1(x))
+            x_condition = F.relu(self.conv1(x_condition))
             #x = F.dropout(x, training=self.training)
-            x = F.relu(self.conv2(x))
-            x = F.relu(self.conv3(x))
-            x = F.relu(self.conv4(x))
+            x_condition = F.relu(self.conv2(x_condition))
+            x_condition = F.relu(self.conv3(x_condition))
+            x_condition = F.relu(self.conv4(x_condition))
             #x = x[0] # select weights from root node
-            x = x.view(-1, 64*1*5)
-            x = F.relu(self.lin1(x))
+            x_condition = x_condition.view(-1, 64*1*5)
+            x_condition = F.relu(self.lin1(x_condition))
 
         if strategy == "graph_conv":
             [type_int, property] = data  # , edge_index, edge_weight = data.x, data.edge_index, data.edge_attr
-            x = F.relu(self.conv1(x), edge_index, edge_weight)
+            x_condition = F.relu(self.conv1(x_condition), edge_index, edge_weight)
             # x = F.dropout(x, training=self.training)
-            x = F.relu(self.conv2(x), edge_index, edge_weight)
-            x = F.relu(self.conv3(x), edge_index, edge_weight)
-            x = F.relu(self.conv4(x), edge_index, edge_weight)
+            x_condition = F.relu(self.conv2(x_condition), edge_index, edge_weight)
+            x_condition = F.relu(self.conv3(x_condition), edge_index, edge_weight)
+            x_condition = F.relu(self.conv4(x_condition), edge_index, edge_weight)
             # x = x[0] # select weights from root node
-            x = x.view(-1, 64 * 1 * 5)
-            x = F.relu(self.lin1(x))
+            x_condition = x_condition.view(-1, 64 * 1 * 5)
+            x_condition = F.relu(self.lin1(x_condition))
 
         if strategy == "lstm":
-            packed_input = torch.nn.utils.rnn.pack_padded_sequence(x, pad_lens, enforce_sorted=False, batch_first=True)
+            packed_input = torch.nn.utils.rnn.pack_padded_sequence(x_condition, pad_lens, enforce_sorted=False, batch_first=True)
             packed_outputs, _ = self.lstm_condition(packed_input)#, input_memory)
-            x, outputs_len = torch.nn.utils.rnn.pad_packed_sequence(packed_outputs, batch_first=True)
+            x_condition, outputs_len = torch.nn.utils.rnn.pad_packed_sequence(packed_outputs, batch_first=True)
             # (batch_size) -> (batch_size, 1, 1)
             lengths = pad_lens.unsqueeze(1).unsqueeze(2)
             # (batch_size, 1, 1) -> (batch_size, 1, hidden_size)
-            lengths = lengths.expand((-1, 1, x.size(2)))
+            lengths = lengths.expand((-1, 1, x_condition.size(2)))
             # (batch_size, seq, hidden_size) -> (batch_size, 1, hidden_size)
-            x = torch.gather(x, 1, lengths - 1)
+            x_condition = torch.gather(x_condition, 1, lengths - 1)
             # (batch_size, 1, hidden_size) -> (batch_size, hidden_size)
-            x = x.squeeze(1)
+            x_condition = x_condition.squeeze(1)
 
-        x = F.relu(self.lin1(x))
-        x = self.lin2(x)
+
+            packed_context_in = torch.nn.utils.rnn.pack_padded_sequence(token_batch_pad, pad_token_lens, enforce_sorted=False, batch_first=True)
+            packed_context_out, _ = self.lstm_context(packed_context_in)
+            x_context, outputs_len = torch.nn.utils.rnn.pad_packed_sequence(packed_context_out, batch_first=True)
+            # (batch_size) -> (batch_size, 1, 1)
+            lengths = pad_token_lens.unsqueeze(1).unsqueeze(2)
+            # (batch_size, 1, 1) -> (batch_size, 1, hidden_size)
+            lengths = lengths.expand((-1, 1, x_context.size(2)))
+            # (batch_size, seq, hidden_size) -> (batch_size, 1, hidden_size)
+            x_context = torch.gather(x_context, 1, lengths - 1)
+            # (batch_size, 1, hidden_size) -> (batch_size, hidden_size)
+            x_context = x_context.squeeze(1)
+
+
+        x_condition = F.relu(self.lin_condition(x_condition))
+        x_context = F.relu(self.lin_context(x_context))
+        x = torch.cat([x_condition, x_context], dim=1)
+        x = self.lin(x)
         x = torch.sigmoid(x)
         return x
 
@@ -122,11 +139,11 @@ class Net(nn.Module):
             count_correct = 0.0
             count_wrong = 0.0
             i = 0
-            for batch_idx, (type_batch_pad, property_batch_pad, label_batch, pad_lens) in enumerate(training_generator):
+            for batch_idx, (type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens, label_batch) in enumerate(training_generator):
                 # TODO why Variable? Necessary?
                 #data, target = Variable(data), Variable(target)
                 optimizer.zero_grad()
-                net_out = self(type_batch_pad, property_batch_pad, pad_lens)
+                net_out = self(type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens)
                 pred = net_out.to(torch.float32).squeeze(1)
                 target_batch = torch.where(label_batch == 0, torch.zeros_like(label_batch, dtype=torch.float), torch.ones_like(label_batch, dtype=torch.float))
                 loss = self.criterion(pred, target_batch)
@@ -149,8 +166,8 @@ class Net(nn.Module):
         classify_set = ClassifyLoader(data_set)
         test_generator = torch.utils.data.DataLoader(classify_set, **self.params, collate_fn=classify_set.pad_collate) # torch_geometric.data.DataLoader(test_set, **self.params)
         is_bug = []
-        for batch_idx, (type_batch_pad, property_batch_pad, pad_lens) in enumerate(test_generator):
-            net_out = self(type_batch_pad, property_batch_pad, pad_lens)
+        for batch_idx, (type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens) in enumerate(test_generator):
+            net_out = self(type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens)
             pred = net_out.to(torch.float32).squeeze(1)
             pred = (pred >= 0.5).tolist()
             is_bug += pred  # TODO finetune for tradeoff precision and recall
@@ -189,19 +206,22 @@ class TrainLoader(torch.utils.data.Dataset):# torch_geometric.data.Dataset):
         type_int_lst = data_dict['type_int_lst']
         type_tensor = torch.stack(type_int_lst)
         property_emb_lst = data_dict['property_emb_lst']
-        property_tensor = torch.stack(property_emb_lst) #torch.Tensor(property_emb_lst)
-        #data = list(zip(type_int_lst, property_emb_lst))
+        property_tensor = torch.stack(property_emb_lst)
+        token_emb_lst = data_dict['code_adjacent_emb_lst']
+        token_tensor = torch.stack(token_emb_lst)
         target = data_dict['label']
-        return type_tensor, property_tensor, target
+        return type_tensor, property_tensor, token_tensor, target
 
     def pad_collate(self, batch):
-        (type_batch, property_batch, target_batch) = zip(*batch)
+        (type_batch, property_batch, token_batch, target_batch) = zip(*batch)
         pad_lens = torch.tensor([len(type) for type in type_batch])
 
         type_batch_pad = pad_sequence(type_batch, batch_first=True, padding_value=0)
         property_batch_pad = pad_sequence(property_batch, batch_first=True, padding_value=0)
+        token_batch_pad = pad_sequence(token_batch, batch_first=True, padding_value=0)
+        pad_token_lens = torch.tensor([len(token) for token in token_batch])
 
-        return type_batch_pad, property_batch_pad, torch.tensor(target_batch), pad_lens
+        return type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens, torch.tensor(target_batch)
 
 
 class ClassifyLoader(TrainLoader):
@@ -211,14 +231,19 @@ class ClassifyLoader(TrainLoader):
         type_int_lst = data_dict['type_int_lst']
         type_tensor = torch.stack(type_int_lst)
         property_emb_lst = data_dict['property_emb_lst']
-        property_tensor = torch.stack(property_emb_lst) #torch.Tensor(property_emb_lst)
-        return type_tensor, property_tensor
+        property_tensor = torch.stack(property_emb_lst)
+        token_emb_lst = data_dict['code_adjacent_emb_lst']
+        token_tensor = torch.stack(token_emb_lst)
+        return type_tensor, property_tensor, token_tensor
 
     def pad_collate(self, batch):
-        (type_batch, property_batch) = zip(*batch)
+        (type_batch, property_batch, token_batch) = zip(*batch)
         pad_lens = torch.tensor([len(type) for type in type_batch])
 
         type_batch_pad = pad_sequence(type_batch, batch_first=True, padding_value=0)
         property_batch_pad = pad_sequence(property_batch, batch_first=True, padding_value=0)
 
-        return type_batch_pad, property_batch_pad, pad_lens
+        token_batch_pad = pad_sequence(token_batch, batch_first=True, padding_value=0)
+        pad_token_lens = torch.tensor([len(token) for token in token_batch])
+
+        return type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens
