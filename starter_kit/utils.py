@@ -350,11 +350,9 @@ def create_result(json_dict):
     predicted_results = defaultdict(list)
     for path, d in json_dict.items():
         for i in range(len(d[KEY_IS_BUG])):
-            line_begin = d[KEY_IF_AST][i]['test']['loc']['start']['line']
-            line_end = d[KEY_IF_AST][i]['test']['loc']['end']['line']
             if d[KEY_IS_BUG][i]:
-                for line in range(line_begin, line_end + 1): # TODO check if all lines of if statement are relevant
-                    predicted_results[path].append(line)
+                line_begin = d[KEY_IF_AST][i]['test']['loc']['start']['line']
+                predicted_results[path].append(line_begin)
     return dict(predicted_results)
 
 def weighted_distribution(labels, distribution):
