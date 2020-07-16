@@ -158,9 +158,11 @@ class Net(nn.Module):
                     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                             epoch, batch_idx * self.params['batch_size'], len(training_generator.dataset),
                                    100. * batch_idx / len(training_generator), loss.data))
-            print('Train Epoch: {} \tLoss: {:.4f} \tAcc: {:.4f}'.format(epoch, loss_avg/i, count_correct / (count_correct+count_wrong)))
+            accuracy = count_correct / (count_correct+count_wrong)
+            loss_avg = loss_avg/i
+            print('Train Epoch: {} \tLoss: {:.4f} \tAcc: {:.4f}'.format(epoch, loss_avg, accuracy))
 
-            torch.save(self.state_dict(), "model")
+            torch.save(self.state_dict(), 'model_{}_{:d}_{:d}'.format(epoch+1, int(loss_avg*100), int(accuracy*100)))
 
     def classify(self, data_set):
         classify_set = ClassifyLoader(data_set)
