@@ -61,7 +61,7 @@ def evaluation(input_dir: str, out_file: str) -> None:
             list_of_json_file_paths=list_of_json_file_paths, token_embedding=token_embedding)
         # Now write the found bugs to the JSON file
         print("Write bugs to JSON: " + out_file)
-        if found_bugs and isinstance(found_bugs, dict) and out_file and len(found_bugs) > 0:
+        if found_bugs is not None and isinstance(found_bugs, dict) and out_file:
             write_json_file(data=found_bugs, file_path=out_file)
     except Exception as e:
         print(str(e))
