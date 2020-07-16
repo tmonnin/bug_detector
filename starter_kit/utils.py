@@ -130,13 +130,8 @@ class BinTree:
         self.ast = ast
         self.left = None
         self.right = None
-        self.property = None
-
-        #try:
-        #    self.type = ast["type"]
-        #except:
-        #    print(ast)
-        #    raise
+        self.property = "" # Default for uncaught cases
+        self.type = 0 # Default for uncaught cases
         if ast["type"] == "UnaryExpression":
             self.type=1
             self.property = ast["operator"]
@@ -188,12 +183,18 @@ class BinTree:
             self.type=12
             self.property = ast["operator"]
             self.left = BinTree(ast["argument"])
-        #elif ObjectExpression
-        #elif RegExp
-        #elif ArrayExpression
-        #elif SequenceExpression
+        #elif ast["type"] == "ObjectExpression":
+        #    self.type=13
+        #elif ast["type"] == "RegExp":
+        #    self.type=14
+        #    self.property = "regex"
+        #elif ast["type"] == "ArrayExpression":
+        #    self.type=15
+        #    self.property = "array"
+        #elif ast["type"] == "SequenceExpression":
+        #    self.type=16
         else:
-            self.type=12
+            pass
         #    print(ast)
         #    print(ast.keys())
         #    print(ast["type"])
