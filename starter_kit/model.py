@@ -2,17 +2,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import torch.utils
-from torch.nn.utils.rnn import pack_sequence, pad_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
-#from torch_geometric.nn import GCNConv
-#from torch_geometric import transforms
-#import torch_geometric
 
-class Net(nn.Module):
+class LSTMNet(nn.Module):
 
     def __init__(self, num_features=13, num_classes=1):
-        super(Net, self).__init__()
+        super(LSTMNet, self).__init__()
         # TODO check if necessary
         # 4 special characters: < pad >, EOS, < unk >, N
         # https://suzyahyah.github.io/pytorch/2019/07/01/DataLoader-Pad-Pack-Sequence.html
@@ -56,7 +53,6 @@ class Net(nn.Module):
                        'num_workers': 0}
 
     def forward(self, type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens):
-        #outputs, outputs_len = torch.nn.utils.rnn.pad_packed_sequence(type_pack, batch_first=True)
 
         strategy = "lstm"
         #for type_len, type_pad in zip(type_lens, type_batch_pad):
@@ -90,9 +86,9 @@ class Net(nn.Module):
             x_condition = F.relu(self.lin1(x_condition))
 
         if strategy == "lstm":
-            packed_input = torch.nn.utils.rnn.pack_padded_sequence(x_condition, pad_lens, enforce_sorted=False, batch_first=True)
+            packed_input = pack_padded_sequence(x_condition, pad_lens, enforce_sorted=False, batch_first=True)
             packed_outputs, _ = self.lstm_condition(packed_input)#, input_memory)
-            x_condition, outputs_len = torch.nn.utils.rnn.pad_packed_sequence(packed_outputs, batch_first=True)
+            x_condition, outputs_len = pad_packed_sequence(packed_outputs, batch_first=True)
             # (batch_size) -> (batch_size, 1, 1)
             lengths = pad_lens.unsqueeze(1).unsqueeze(2)
             # (batch_size, 1, 1) -> (batch_size, 1, hidden_size)
@@ -127,7 +123,7 @@ class Net(nn.Module):
         training_set = TrainLoader(train_set)
         assert len(training_set) == len(weights)
         weighted_sampler = torch.utils.data.WeightedRandomSampler(weights, len(weights), replacement=True)
-        training_generator = torch.utils.data.DataLoader(training_set, **self.params, collate_fn=training_set.pad_collate, sampler=weighted_sampler) # torch_geometric.data.DataLoader(training_set, **self.params)
+        training_generator = torch.utils.data.DataLoader(training_set, **self.params, collate_fn=training_set.pad_collate, sampler=weighted_sampler)
 
         # create a stochastic gradient descent optimizer
         optimizer = torch.optim.Adam(self.parameters())# SGD(self.parameters(), lr=learning_rate, momentum=0.2)
@@ -166,7 +162,7 @@ class Net(nn.Module):
 
     def classify(self, data_set):
         classify_set = ClassifyLoader(data_set)
-        test_generator = torch.utils.data.DataLoader(classify_set, **self.params, collate_fn=classify_set.pad_collate) # torch_geometric.data.DataLoader(test_set, **self.params)
+        test_generator = torch.utils.data.DataLoader(classify_set, **self.params, collate_fn=classify_set.pad_collate)
         is_bug = []
         for batch_idx, (type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens) in enumerate(test_generator):
             net_out = self(type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens)
@@ -195,7 +191,7 @@ class Net(nn.Module):
             100. * correct / len(test_generator.dataset)))
 
 
-class TrainLoader(torch.utils.data.Dataset):# torch_geometric.data.Dataset):
+class TrainLoader(torch.utils.data.Dataset):
 
     def __init__(self, data_lst):
         self.data_lst = data_lst
