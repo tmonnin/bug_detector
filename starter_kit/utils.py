@@ -10,6 +10,7 @@ import re
 
 from model_lstm import LSTMNet
 from model_gcn import GCNNet
+from model_cnn import CNNNet
 
 ### Pre-defined
 KEY_CODE = 'raw_source_code'
@@ -25,7 +26,7 @@ KEY_IS_BUG = 'is_bug'
 class ConditionalHandler:
     def __init__(self, code, condition, if_ast):
         self.code = code
-        self.condition = condition # extract(if_ast["test"]["loc"], code)
+        self.condition = condition
         self.bin_tree = BinTree(if_ast["test"])
 
 def read_json_file(json_file_path: str) -> List:
@@ -64,13 +65,13 @@ def extract_if_dicts(path):
     return if_dict_lst, code, code_identifier_lst
 
 def generate_data_dict_sequence(d, token_embedding):
-    #d = {'if_ast': d[0], 'label': d[1]}
     conditional_handler = ConditionalHandler(None, None, d["if_ast"])
     type_int_lst = []
     property_emb_lst = []
     conditional_handler.bin_tree.to_sequence(type_int_lst, property_emb_lst, token_embedding)
     token_lst = []
     for code_line in d["code_adjacent"][:5]:
+        # Generate tokens by splitting alphabetic words
         token_lst += re.findall('[a-zA-Z]+', code_line)
     if not len(token_lst):
         # Add a 0 to have at least one token
@@ -121,10 +122,6 @@ def generate_data_dict_graph(d, token_embedding):
 class BinTree:
 
     def __init__(self, ast):
-        if ast is None:
-            # TODO remove
-            print("NOT POSSIBLE")
-            return
         self.ast = ast
         self.left = None
         self.right = None
@@ -143,7 +140,7 @@ class BinTree:
             self.type=3
             self.property="()"
             self.left=BinTree(ast["callee"])
-            self.right=None#BinTree(ast["arguments"][0])
+            self.right=None
         elif ast["type"] == "MemberExpression":
             self.type=4
             self.property="."
@@ -193,10 +190,6 @@ class BinTree:
         #    self.type=16
         else:
             pass
-        #    print(ast)
-        #    print(ast.keys())
-        #    print(ast["type"])
-        #    print("MISSED")
 
     def to_graph(self, type_int_lst, property_emb_lst, edge_lst, token_embedding):
         idx = len(type_int_lst)
@@ -212,8 +205,9 @@ class BinTree:
             edge_lst.append([idx, idx_right])
             edge_lst.append([idx_right, idx])
         if idx == 0 and not len(edge_lst):
-            edge_lst.append([0, 0]) # if test condition is only
-            edge_lst.append([0, 0]) # if test condition is only
+            # if test condition is only one node in AST, add self-edges
+            edge_lst.append([0, 0])
+            edge_lst.append([0, 0])
         return idx
 
     def to_sequence(self, type_int_lst, property_emb_lst, token_embedding):
@@ -247,6 +241,8 @@ def load_model(model_path, strategy='lstm'):
         net = LSTMNet()
     elif strategy == 'gcn':
         net = GCNNet()
+    elif strategy == 'cnn':
+        net = CNNNet()
     else:
         raise Exception("Strategy not supported")
     if os.path.exists(model_path):
@@ -260,8 +256,10 @@ def extract(loc_dict, code, padding=0, skip_condition=False, return_list=False):
     end_l = loc_dict["end"]["line"]
     end_c = loc_dict["end"]["column"]
     if not skip_condition:
+        # Include if statement
         lines = code.splitlines()[max(start_l-1-padding,0):end_l+padding]
     else:
+        # Assert padding * 2 number of lines
         lines = [""] * (padding * 2)
         lines_above = code.splitlines()[max(start_l-1-padding,0):start_l-1]
         for i, line_above in enumerate(lines_above[::-1]):
@@ -270,6 +268,7 @@ def extract(loc_dict, code, padding=0, skip_condition=False, return_list=False):
         for i, line_below in enumerate(lines_below):
             lines[padding + i] = line_below
 
+    # If padding is 0, extract precise character range
     if padding == 0:
         lines[-1] = lines[-1][:end_c]
         lines[0] = lines[0][start_c:]
@@ -282,6 +281,7 @@ def extract(loc_dict, code, padding=0, skip_condition=False, return_list=False):
     return res
 
 def dict_visitor(value, json_dict=None, expressions=None, identifiers=None):
+    """Generic method to extract if statements and more from AST dict"""
 
     if isinstance(value, dict):
         for k, v in value.items():
@@ -291,11 +291,10 @@ def dict_visitor(value, json_dict=None, expressions=None, identifiers=None):
                 for i in v:
                     dict_visitor(i, json_dict, expressions, identifiers)
             elif k == "type":
-                if v == "IfStatement" and json_dict is not None: # TODO change to constants
+                if v == "IfStatement" and json_dict is not None:
                     # Found an IfStatement
                     json_dict[KEY_IF_AST].append(value)
                     json_dict[KEY_START_LINE].append(value["loc"]["start"]["line"])
-                    # json_dict[KEY_START_LINE].append([value["loc"]["start"]["line"], value["loc"]["end"]["line"]])
                     if expressions is not None:
                         condition = value["test"]
                         type = condition["type"]
@@ -303,7 +302,7 @@ def dict_visitor(value, json_dict=None, expressions=None, identifiers=None):
                             expressions[type].update(list(condition.keys()))
                         else:
                             expressions[type] = set(list(condition.keys()))
-                elif v == "Identifier" and "name" in value.keys(): # TODO change to constants
+                elif v == "Identifier" and "name" in value.keys():
                     if identifiers is not None:
                         identifiers.append(value)
 
@@ -319,8 +318,8 @@ def print_json(j):
 
 def count_unique(list):
     values, counts = np.unique(list, return_counts=True)
-    print(values)
-    print(counts)
+    print("Values:" ,str(values))
+    print("Counts:", str(counts))
 
 def print_expressions(expressions):
     for k, v in expressions.items():
