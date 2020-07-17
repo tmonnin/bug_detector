@@ -71,25 +71,25 @@ class LSTMNet(nn.Module):
         weights = utils.weighted_distribution(labels, distribution)
         assert len(training_set) == len(weights)
         weighted_sampler = torch.utils.data.WeightedRandomSampler(weights, len(weights), replacement=True)
-        training_generator = torch.utils.data.DataLoader(training_set, **self.params, collate_fn=training_set.pad_collate, sampler=weighted_sampler)
+        training_loader = torch.utils.data.DataLoader(training_set, **self.params, collate_fn=training_set.pad_collate, sampler=weighted_sampler)
 
-        # create a stochastic gradient descent optimizer
-        optimizer = torch.optim.Adam(self.parameters())# SGD(self.parameters(), lr=learning_rate, momentum=0.2)
-        # create a loss function
+        # Use Adam optimizer as suggested in literature
+        optimizer = torch.optim.Adam(self.parameters())
 
-        # run the main training loop
+        # Training loop
         for epoch in range(1, epochs+1):
             loss_avg = 0
             count_correct = 0.0
             count_wrong = 0.0
             i = 0
-            for batch_idx, (type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens, label_batch) in enumerate(training_generator):
-                # TODO why Variable? Necessary?
-                #data, target = Variable(data), Variable(target)
+            for batch_idx, (type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens, label_batch) in enumerate(training_loader):
                 optimizer.zero_grad()
+                # Inference
                 net_out = self(type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens)
                 pred = net_out.to(torch.float32).squeeze(1)
-                target_batch = torch.where(label_batch == 0, torch.zeros_like(label_batch, dtype=torch.float), torch.ones_like(label_batch, dtype=torch.float))
+                zero_target = torch.zeros_like(label_batch, dtype=torch.float)
+                one_target = torch.ones_like(label_batch, dtype=torch.float)
+                target_batch = torch.where(label_batch == 0, zero_target, one_target)
                 loss = self.criterion(pred, target_batch)
                 correct_pred = torch.eq(pred.round(), target_batch)
                 count_correct += (correct_pred == True).sum()
@@ -100,8 +100,8 @@ class LSTMNet(nn.Module):
                 optimizer.step()
                 if batch_idx * self.params['batch_size'] % 1000 == 0:
                     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                            epoch, batch_idx * self.params['batch_size'], len(training_generator.dataset),
-                                   100. * batch_idx / len(training_generator), loss.data))
+                            epoch, batch_idx * self.params['batch_size'], len(training_loader.dataset),
+                                   100. * batch_idx / len(training_loader), loss.data))
             accuracy = count_correct / (count_correct+count_wrong)
             loss_avg = loss_avg/i
             print('Train Epoch: {} \tLoss: {:.4f} \tAcc: {:.4f}'.format(epoch, loss_avg, accuracy))
@@ -110,22 +110,23 @@ class LSTMNet(nn.Module):
 
     def classify(self, data_set):
         classify_set = ClassifyLoader(data_set)
-        test_generator = torch.utils.data.DataLoader(classify_set, **self.params, collate_fn=classify_set.pad_collate)
+        classify_loader = torch.utils.data.DataLoader(classify_set, **self.params, collate_fn=classify_set.pad_collate)
         is_bug = []
-        for batch_idx, (type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens) in enumerate(test_generator):
+        for batch_idx, (type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens) in enumerate(classify_loader):
             net_out = self(type_batch_pad, property_batch_pad, token_batch_pad, pad_lens, pad_token_lens)
             pred = net_out.to(torch.float32).squeeze(1)
+            # Choose hyperparameter as tradeoff between precision and recall
             pred = (pred >= 0.5).tolist()
-            is_bug += pred  # TODO finetune for tradeoff precision and recall
+            is_bug += pred
         return is_bug
 
     def test(self, test_set):
         test_set = TrainLoader(test_set)
-        test_generator = torch.utils.data.DataLoader(test_set, **self.params, collate_fn=test_set.pad_collate)
+        test_loader = torch.utils.data.DataLoader(test_set, **self.params, collate_fn=test_set.pad_collate)
         # run a test loop
         test_loss = 0
         correct = 0
-        for data, target in test_generator:
+        for data, target in test_loader:
             data, target = Variable(data, volatile=True), Variable(target)
             net_out = self(data)
             # sum up batch loss
@@ -133,10 +134,10 @@ class LSTMNet(nn.Module):
             pred = net_out.data.max(1)[1]  # get the index of the max log-probability
             correct += pred.eq(target.data).sum()
 
-        test_loss /= len(test_generator.dataset)
+        test_loss /= len(test_loader.dataset)
         print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-            test_loss, correct, len(test_generator.dataset),
-            100. * correct / len(test_generator.dataset)))
+            test_loss, correct, len(test_loader.dataset),
+            100. * correct / len(test_loader.dataset)))
 
 
 class TrainLoader(torch.utils.data.Dataset):
