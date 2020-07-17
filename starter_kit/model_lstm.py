@@ -10,7 +10,7 @@ import utils
 
 class LSTMNet(nn.Module):
 
-    def __init__(self, num_features=13, num_classes=1):
+    def __init__(self, num_features=17, num_classes=1):
         super(LSTMNet, self).__init__()
 
         self.embedding = nn.Embedding(num_features, 50)
