@@ -334,9 +334,8 @@ def print_expressions(expressions):
     # {'name', 'type', 'range', 'loc'}
 
 def create_result(json_dict):
-    predicted_results = dict()
+    predicted_results = defaultdict(list)
     for path, d in json_dict.items():
-        predicted_results[path] = []
         for i in range(len(d[KEY_IS_BUG])):
             if d[KEY_IS_BUG][i]:
                 line_begin = d[KEY_IF_AST][i]['test']['loc']['start']['line']
