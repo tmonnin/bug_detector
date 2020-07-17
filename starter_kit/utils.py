@@ -87,23 +87,19 @@ def generate_data_dict_sequence(d, token_embedding):
 
     return data_dict
 
-def generate_data_dict_flattened(if_ast, token_embedding, y=None):
-    conditional_handler = ConditionalHandler(None, None, if_ast)
+def generate_data_dict_flattened(d, token_embedding, y=None):
+    conditional_handler = ConditionalHandler(None, None, d["if_ast"])
     x_lst = []
-    edge_lst = []
-    conditional_handler.bin_tree.to_flattened(x_lst, edge_lst, token_embedding, depth=4)
-    type_oh = torch.zeros([15], dtype=torch.int64)  # [b, c, h, w]
-    property_ft = torch.zeros((100, 1, 15), dtype=torch.float)  # [b, c, h, w]
-
+    conditional_handler.bin_tree.to_flattened(x_lst, token_embedding, depth=4)
+    type_int_lst = []
+    property_emb_lst = []
     for i in range(len(x_lst)):
-        type_oh[i] = x_lst[i][0]
-        property_ft[:, 0, i] = x_lst[i][1]
+        type_int_lst.append(x_lst[i][0])
+        property_emb_lst.append(x_lst[i][1])
 
-    data_dict = {'type_oh': type_oh, 'property_ft': property_ft}
-    label = -1
-    if y is not None:
-        label = torch.tensor([y], dtype=torch.float32)
-    data_dict['label'] = label
+    data_dict = {'type_int_lst': type_int_lst, 'property_emb_lst': property_emb_lst}
+    if "label" in d.keys():
+        data_dict['label'] = torch.tensor([d["label"]], dtype=torch.int)
 
     return data_dict
 
@@ -222,19 +218,20 @@ class BinTree:
     def to_flattened(self, x_lst, token_embedding, depth):
         if depth == 0:
             return None
-        property_ft = torch.tensor(token_embedding[str(self.property)])
+        type_tensor = torch.tensor([self.type], dtype=torch.int64)
+        property_tensor = torch.tensor(token_embedding[str(self.property)]).unsqueeze(0)
 
         if self.left is not None:
             self.left.to_flattened(x_lst, token_embedding, depth-1)
         else:
             for i in range(2**(depth-1)-1):
-                x_lst.append([0, torch.zeros(1,100)])
-        x_lst.append([self.type, property_ft])
+                x_lst.append([torch.zeros(1, dtype=torch.int64), torch.zeros(1,100)])
+        x_lst.append([type_tensor, property_tensor])
         if self.right is not None:
             self.right.to_flattened(x_lst, token_embedding, depth-1)
         else:
             for i in range(2**(depth-1)-1):
-                x_lst.append([0, torch.zeros(1,100)])
+                x_lst.append([torch.zeros(1, dtype=torch.int64), torch.zeros(1,100)])
 
 def load_model(model_path, strategy='lstm'):
     if strategy == 'lstm':
@@ -316,11 +313,6 @@ def print_json(j):
     print("TokenList", j[KEY_TOKENS])
     print("TokenRange", j[KEY_TOKENRANGE])
 
-def count_unique(list):
-    values, counts = np.unique(list, return_counts=True)
-    print("Values:" ,str(values))
-    print("Counts:", str(counts))
-
 def print_expressions(expressions):
     for k, v in expressions.items():
         print(k, v)
@@ -353,12 +345,11 @@ def create_result(json_dict):
 
 def weighted_distribution(labels, distribution):
     class_sample_count = np.unique(labels, return_counts=True)
-    print(class_sample_count)
+    print("Class labels and occurences:", str(class_sample_count))
     assert len(class_sample_count[1]) == 6
     class_p = []
     for p, n_i in zip(distribution, class_sample_count[1]):
         class_p.append(p/n_i)
-    print(class_p)
     weights = []
     for label in labels:
         weights.append(class_p[label])
