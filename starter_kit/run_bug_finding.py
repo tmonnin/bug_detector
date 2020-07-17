@@ -2,7 +2,9 @@ from typing import List, Dict
 import os
 import fasttext
 from collections import defaultdict
+import traceback
 import logging
+
 import utils
 import train
 
@@ -48,23 +50,19 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
     model_path_full = os.path.join(cur_dir_path, train.model_path)
     net = utils.load_model(model_path_full, train.strategy)
 
-    list_of_json_file_paths = list_of_json_file_paths[0:50]
+    list_of_json_file_paths = list_of_json_file_paths[:]
     for path in list_of_json_file_paths:
         try:
             logging.debug(path)
             if_dict_lst, code, code_identifier_lst = utils.extract_if_dicts(path)
-            # print(j.keys())
-            # dict_keys(['tokenList', 'raw_source_code', 'ast', 'tokenRangesList'])
-
-            logging.debug("Code")
-            logging.debug(code)
             json_dict[path] = defaultdict(list)
-
             for if_dict in if_dict_lst:
                 if train.strategy == 'lstm':
                     d = utils.generate_data_dict_sequence(if_dict, token_embedding)
                 elif train.strategy == 'gcn':
                     d = utils.generate_data_dict_graph(if_dict, token_embedding)
+                elif train.strategy == 'cnn':
+                    d = utils.generate_data_dict_flattened(if_dict, token_embedding)
                 is_bug = net.classify([d])
                 json_dict[path][utils.KEY_IF_AST] += [if_dict[utils.KEY_IF_AST]]
                 json_dict[path][utils.KEY_IS_BUG] += is_bug
@@ -74,7 +72,6 @@ def find_bugs_in_js_files(list_of_json_file_paths: List[str], token_embedding: f
         except Exception as e:
             logging.error("Exception in file " + path)
             logging.error(e)
-            import traceback
             traceback.print_exc()
 
     result_dict = utils.create_result(json_dict)

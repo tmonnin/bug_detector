@@ -106,7 +106,7 @@ class LSTMNet(nn.Module):
             loss_avg = loss_avg/i
             print('Train Epoch: {} \tLoss: {:.4f} \tAcc: {:.4f}'.format(epoch, loss_avg, accuracy))
 
-            torch.save(self.state_dict(), 'model_d{:d}_e{}_l{:d}_a{:d}'.format(int(distribution[0]*100), epoch, int(loss_avg*100), int(accuracy*100)))
+            torch.save(self.state_dict(), 'model_lstm_d{:d}_e{}_l{:d}_a{:d}'.format(int(distribution[0]*100), epoch, int(loss_avg*100), int(accuracy*100)))
 
     def classify(self, data_set):
         classify_set = ClassifyLoader(data_set)

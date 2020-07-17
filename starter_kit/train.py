@@ -42,7 +42,7 @@ def run():
                 elif strategy == 'gcn':
                     data_dict[json_file].append(utils.generate_data_dict_graph(d, token_embedding))
                 elif strategy == 'cnn':
-                    data_dict[json_file].append(utils.generate_data_dict_flatten(d, token_embedding))
+                    data_dict[json_file].append(utils.generate_data_dict_flattened(d, token_embedding))
 
     if len_initial < len(data_dict):
         logging.info("Save new dict")
