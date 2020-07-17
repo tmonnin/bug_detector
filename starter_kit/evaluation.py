@@ -11,8 +11,7 @@ Run this script as:
                       will contain the results of the bug finding. 
 """
 
-from typing import List, Dict
-import argparse
+from typing import Dict
 from pathlib import Path
 import run_bug_finding
 import json
@@ -26,7 +25,6 @@ import fasttext
 
 def write_json_file(data: Dict, file_path: str) -> None:
     try:
-        # print("Writing JSON file "+file_path)
         json.dump(data, codecs.open(file_path, 'w', encoding='utf-8'),
                   separators=(',', ':'))
     except Exception as e:
@@ -56,7 +54,6 @@ def evaluation(input_dir: str, out_file: str) -> None:
             path=file_path_to_fast_text_embedding)
 
         print("Find bugs")
-        # Dict[str, List[int]]
         found_bugs = run_bug_finding.find_bugs_in_js_files(
             list_of_json_file_paths=list_of_json_file_paths, token_embedding=token_embedding)
         # Now write the found bugs to the JSON file
@@ -65,8 +62,6 @@ def evaluation(input_dir: str, out_file: str) -> None:
             write_json_file(data=found_bugs, file_path=out_file)
     except Exception as e:
         print(str(e))
-        #raise e
-
 
 def run() -> None:
     if len(sys.argv) != 3:  # Use the default input and output directories if no arguments are provided
